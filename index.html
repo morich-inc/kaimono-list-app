@@ -71,6 +71,7 @@
     font-size:12px;
     cursor:pointer;
   }
+  .user-bar .user-bar-actions{display:flex; gap:6px;}
   nav.tabs{
     display:flex;
     justify-content:center;
@@ -313,7 +314,7 @@
   }
 
   @media print{
-    header, .user-bar, nav.tabs, #tab-register, #tab-list, #tab-admin, .select-row, #generate-shopping-list, #download-pdf, footer{display:none !important;}
+    header, .user-bar, #password-change-panel, nav.tabs, #tab-register, #tab-list, #tab-admin, .select-row, #generate-shopping-list, #download-pdf, footer{display:none !important;}
     body{background:#fff;}
     #shopping-result{display:block !important;}
   }
@@ -361,7 +362,22 @@
 <div id="app-root" style="display:none">
   <div class="user-bar">
     <div><span id="user-email"></span><span class="role-badge" id="user-role-badge"></span></div>
-    <button id="logout-btn">ログアウト</button>
+    <div class="user-bar-actions">
+      <button id="change-password-btn">🔑 パスワード変更</button>
+      <button id="logout-btn">ログアウト</button>
+    </div>
+  </div>
+
+  <div id="password-change-panel" style="display:none; max-width:640px; margin:0 auto 16px; padding:0 16px;">
+    <div class="card">
+      <h3 style="margin-top:0">🔑 パスワード変更</h3>
+      <label>新しいパスワード（6文字以上）</label>
+      <input type="password" id="new-password" minlength="6">
+      <label>新しいパスワード（確認）</label>
+      <input type="password" id="new-password-confirm" minlength="6">
+      <button type="button" id="save-password-btn" class="primary-btn">変更を保存</button>
+      <div class="auth-message" id="password-message"></div>
+    </div>
   </div>
 
   <nav class="tabs">
@@ -501,12 +517,55 @@ document.getElementById('logout-btn').addEventListener('click', async ()=>{
   await sb.auth.signOut();
 });
 
+/* ---------- パスワード変更 ---------- */
+document.getElementById('change-password-btn').addEventListener('click', ()=>{
+  const panel = document.getElementById('password-change-panel');
+  panel.style.display = (panel.style.display === 'none') ? 'block' : 'none';
+});
+
+document.getElementById('save-password-btn').addEventListener('click', async ()=>{
+  const pw1 = document.getElementById('new-password').value;
+  const pw2 = document.getElementById('new-password-confirm').value;
+  const msg = document.getElementById('password-message');
+  if(pw1.length < 6){
+    msg.textContent = 'パスワードは6文字以上で入力してください';
+    msg.className = 'auth-message show error';
+    return;
+  }
+  if(pw1 !== pw2){
+    msg.textContent = '2つのパスワードが一致しません';
+    msg.className = 'auth-message show error';
+    return;
+  }
+  const btn = document.getElementById('save-password-btn');
+  btn.disabled = true;
+  btn.textContent = '変更中...';
+  const { error } = await sb.auth.updateUser({ password: pw1 });
+  btn.disabled = false;
+  btn.textContent = '変更を保存';
+  if(error){
+    msg.textContent = 'エラー: ' + error.message;
+    msg.className = 'auth-message show error';
+  }else{
+    msg.textContent = 'パスワードを変更しました！次回からこのパスワードでログインできます。';
+    msg.className = 'auth-message show success';
+    document.getElementById('new-password').value = '';
+    document.getElementById('new-password-confirm').value = '';
+  }
+});
+
 /* ---------- セッション監視 ---------- */
 async function boot(){
   const { data: { session } } = await sb.auth.getSession();
   await handleSession(session);
-  sb.auth.onAuthStateChange(async (_event, session)=>{
+  sb.auth.onAuthStateChange(async (event, session)=>{
     await handleSession(session);
+    if(event === 'PASSWORD_RECOVERY'){
+      document.getElementById('password-change-panel').style.display = 'block';
+      const msg = document.getElementById('password-message');
+      msg.textContent = 'パスワード再設定用のリンクからログインしました。新しいパスワードを設定してください。';
+      msg.className = 'auth-message show success';
+    }
   });
 }
 
