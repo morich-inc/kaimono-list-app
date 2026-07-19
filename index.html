@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --cream:#FBF3EA;
@@ -42,6 +43,33 @@
     margin:6px 0 0;
     font-size:13px;
     color:var(--brown-soft);
+  }
+  .user-bar{
+    max-width:640px;
+    margin:0 auto 10px;
+    padding:0 16px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-size:13px;
+    color:var(--brown-soft);
+  }
+  .user-bar .role-badge{
+    background:var(--pink-soft);
+    color:var(--accent);
+    padding:2px 10px;
+    border-radius:999px;
+    font-size:11px;
+    margin-left:6px;
+  }
+  .user-bar button{
+    border:1px solid var(--beige);
+    background:var(--white);
+    color:var(--brown-soft);
+    padding:5px 12px;
+    border-radius:999px;
+    font-size:12px;
+    cursor:pointer;
   }
   nav.tabs{
     display:flex;
@@ -87,7 +115,7 @@
     margin:16px 0 6px;
   }
   label:first-of-type{margin-top:0;}
-  input[type=text], input[type=number], textarea, select{
+  input[type=text], input[type=number], input[type=email], input[type=password], textarea, select{
     width:100%;
     padding:10px 12px;
     border:1px solid var(--beige);
@@ -147,7 +175,7 @@
     padding:12px;
   }
   .voice-box textarea{margin:8px 0;}
-  #apply-voice-to-ingredients, #save-recipe-btn, #generate-shopping-list, #download-pdf, .print-btn{
+  #apply-voice-to-ingredients, #save-recipe-btn, #generate-shopping-list, #download-pdf, .print-btn, .primary-btn{
     width:100%;
     padding:12px;
     border:none;
@@ -170,9 +198,20 @@
     justify-content:space-between;
     align-items:center;
     box-shadow:0 2px 8px rgba(91,70,54,.05);
+    gap:10px;
   }
   .recipe-card .info b{display:block; font-size:15px;}
   .recipe-card .info span{font-size:12px; color:var(--brown-soft);}
+  .owner-badge{
+    display:inline-block;
+    font-size:11px;
+    padding:2px 8px;
+    border-radius:999px;
+    margin-top:4px;
+  }
+  .owner-badge.own{background:var(--pink-soft); color:var(--accent);}
+  .owner-badge.shared{background:var(--beige); color:var(--brown);}
+  .recipe-card .actions{display:flex; flex-shrink:0;}
   .recipe-card .actions button{
     border:none;
     background:var(--beige);
@@ -226,8 +265,55 @@
   }
   #shopping-result-title .heart{color:var(--pink);}
   footer{text-align:center; font-size:11px; color:var(--brown-soft); margin-top:30px;}
+
+  /* Auth screen */
+  #auth-screen{max-width:420px; margin:40px auto; padding:0 16px;}
+  .auth-tabs{display:flex; gap:8px; margin-bottom:16px;}
+  .auth-tab-btn{
+    flex:1;
+    border:1px solid var(--beige);
+    background:var(--white);
+    color:var(--brown-soft);
+    padding:10px;
+    border-radius:10px;
+    font-size:14px;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .auth-tab-btn.active{background:var(--pink); border-color:var(--pink); color:#fff; font-weight:700;}
+  .auth-form{display:none;}
+  .auth-form.active{display:block;}
+  .auth-message{
+    font-size:13px;
+    padding:10px 12px;
+    border-radius:10px;
+    margin-top:12px;
+    display:none;
+  }
+  .auth-message.show{display:block;}
+  .auth-message.error{background:var(--pink-soft); color:#B14A5E;}
+  .auth-message.success{background:#E4F0E4; color:#3D6B3D;}
+  #loading-screen{text-align:center; padding:80px 16px; color:var(--brown-soft);}
+
+  /* Admin */
+  .admin-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 0;
+    border-bottom:1px solid var(--beige);
+    font-size:13px;
+  }
+  .admin-row:last-child{border-bottom:none;}
+  .admin-row .email{flex:1; word-break:break-all;}
+  .admin-row select{width:130px; padding:6px;}
+  .admin-row .save-role-btn{
+    border:none; background:var(--pink); color:#fff; border-radius:8px;
+    padding:6px 10px; font-size:12px; cursor:pointer;
+  }
+
   @media print{
-    header, nav.tabs, #tab-register, #tab-list, .select-row, #generate-shopping-list, #download-pdf, footer{display:none !important;}
+    header, .user-bar, nav.tabs, #tab-register, #tab-list, #tab-admin, .select-row, #generate-shopping-list, #download-pdf, footer{display:none !important;}
     body{background:#fff;}
     #shopping-result{display:block !important;}
   }
@@ -240,84 +326,218 @@
   <p class="tagline">レシピを登録して、人数分の買い物リストをかんたん作成</p>
 </header>
 
-<nav class="tabs">
-  <button class="tab-btn active" data-tab="register">レシピ登録</button>
-  <button class="tab-btn" data-tab="list">レシピ一覧</button>
-  <button class="tab-btn" data-tab="shopping">買い物リスト作成</button>
-</nav>
+<div id="loading-screen">読み込み中...</div>
 
-<!-- レシピ登録 -->
-<section id="tab-register" class="tab-panel active">
+<!-- 認証画面 -->
+<div id="auth-screen" style="display:none">
   <div class="card">
-    <form id="recipe-form">
-      <input type="hidden" id="editing-id">
+    <div class="auth-tabs">
+      <button class="auth-tab-btn active" data-auth-tab="login">ログイン</button>
+      <button class="auth-tab-btn" data-auth-tab="signup">新規登録</button>
+    </div>
 
-      <label>レシピ名 <button type="button" class="mic-btn" data-target="recipe-name">🎤</button></label>
-      <input type="text" id="recipe-name" placeholder="例：生姜焼き" required>
+    <form id="login-form" class="auth-form active">
+      <label>メールアドレス</label>
+      <input type="email" id="login-email" required>
+      <label>パスワード</label>
+      <input type="password" id="login-password" required>
+      <button type="submit" class="primary-btn">ログイン</button>
+      <div class="auth-message" id="login-message"></div>
+    </form>
 
-      <label>基準人数（この分量は何人前か）</label>
-      <input type="number" id="recipe-servings" value="2" min="1" step="1" required>
-
-      <h3>材料</h3>
-      <p class="hint">材料名・分量・単位・カテゴリを入力してください。分量が「適量」の場合は分量を空欄のままでOKです。</p>
-      <div id="ingredient-rows"></div>
-      <button type="button" id="add-ingredient-row">＋ 材料を追加</button>
-
-      <datalist id="unit-options">
-        <option value="g"><option value="kg"><option value="ml"><option value="個">
-        <option value="本"><option value="枚"><option value="パック"><option value="片">
-        <option value="袋"><option value="丁"><option value="束"><option value="かけ">
-        <option value="大さじ"><option value="小さじ"><option value="適量">
-      </datalist>
-
-      <h3>🎤 音声でまとめて材料入力（任意）</h3>
-      <p class="hint">「じゃがいも4個、玉ねぎ2個」のように話すと下の欄に文字が入ります。「材料欄に反映」を押すと自動で行分けされるので、分量・単位・カテゴリだけ確認してください。</p>
-      <div class="voice-box">
-        <button type="button" class="mic-btn" data-target="voice-transcript">🎤 話しかけて入力</button>
-        <textarea id="voice-transcript" rows="2" placeholder="ここに音声が文字になって入ります（直接タイプもOK）"></textarea>
-        <button type="button" id="apply-voice-to-ingredients">↓ 材料欄に反映する</button>
-      </div>
-
-      <h3>作り方（任意） <button type="button" class="mic-btn" data-target="recipe-steps">🎤</button></h3>
-      <textarea id="recipe-steps" rows="4" placeholder="手順をメモしておくと後で見返せます"></textarea>
-
-      <button type="submit" id="save-recipe-btn">💾 このレシピを保存</button>
+    <form id="signup-form" class="auth-form">
+      <label>メールアドレス</label>
+      <input type="email" id="signup-email" required>
+      <label>パスワード（6文字以上）</label>
+      <input type="password" id="signup-password" required minlength="6">
+      <button type="submit" class="primary-btn">新規登録</button>
+      <p class="hint">登録後、確認メールが届きます。メール内のリンクを開いてからログインしてください。</p>
+      <div class="auth-message" id="signup-message"></div>
     </form>
   </div>
-</section>
+</div>
 
-<!-- レシピ一覧 -->
-<section id="tab-list" class="tab-panel">
-  <div id="recipe-list"></div>
-</section>
-
-<!-- 買い物リスト作成 -->
-<section id="tab-shopping" class="tab-panel">
-  <div class="card">
-    <h3 style="margin-top:0">作りたいレシピを選んで、人数を入力してください</h3>
-    <div id="shopping-select"></div>
-    <button id="generate-shopping-list">🛒 買い物リストを作成</button>
+<!-- ログイン後のアプリ本体 -->
+<div id="app-root" style="display:none">
+  <div class="user-bar">
+    <div><span id="user-email"></span><span class="role-badge" id="user-role-badge"></span></div>
+    <button id="logout-btn">ログアウト</button>
   </div>
-  <div class="card" id="shopping-result-card" style="display:none">
-    <div id="shopping-result"></div>
-    <button id="download-pdf">📄 PDFでダウンロード</button>
-    <button class="print-btn" onclick="window.print()">🖨️ 印刷／ブラウザでPDF保存</button>
-  </div>
-</section>
 
-<footer>COCOLABO 買い物リストメーカー ｜ データはこの端末のブラウザ内にのみ保存されます</footer>
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="register">レシピ登録</button>
+    <button class="tab-btn" data-tab="list">レシピ一覧</button>
+    <button class="tab-btn" data-tab="shopping">買い物リスト作成</button>
+    <button class="tab-btn" data-tab="admin" id="admin-tab-btn" style="display:none">会員管理</button>
+  </nav>
+
+  <!-- レシピ登録 -->
+  <section id="tab-register" class="tab-panel active">
+    <div class="card">
+      <form id="recipe-form">
+        <input type="hidden" id="editing-id">
+
+        <label>レシピ名 <button type="button" class="mic-btn" data-target="recipe-name">🎤</button></label>
+        <input type="text" id="recipe-name" placeholder="例：生姜焼き" required>
+
+        <label>基準人数（この分量は何人前か）</label>
+        <input type="number" id="recipe-servings" value="2" min="1" step="1" required>
+
+        <h3>材料</h3>
+        <p class="hint">材料名・分量・単位・カテゴリを入力してください。分量が「適量」の場合は分量を空欄のままでOKです。</p>
+        <div id="ingredient-rows"></div>
+        <button type="button" id="add-ingredient-row">＋ 材料を追加</button>
+
+        <datalist id="unit-options">
+          <option value="g"><option value="kg"><option value="ml"><option value="個">
+          <option value="本"><option value="枚"><option value="パック"><option value="片">
+          <option value="袋"><option value="丁"><option value="束"><option value="かけ">
+          <option value="大さじ"><option value="小さじ"><option value="適量">
+        </datalist>
+
+        <h3>🎤 音声でまとめて材料入力（任意）</h3>
+        <p class="hint">「じゃがいも4個、玉ねぎ2個」のように話すと下の欄に文字が入ります。「材料欄に反映」を押すと自動で行分けされるので、分量・単位・カテゴリだけ確認してください。</p>
+        <div class="voice-box">
+          <button type="button" class="mic-btn" data-target="voice-transcript">🎤 話しかけて入力</button>
+          <textarea id="voice-transcript" rows="2" placeholder="ここに音声が文字になって入ります（直接タイプもOK）"></textarea>
+          <button type="button" id="apply-voice-to-ingredients">↓ 材料欄に反映する</button>
+        </div>
+
+        <h3>作り方（任意） <button type="button" class="mic-btn" data-target="recipe-steps">🎤</button></h3>
+        <textarea id="recipe-steps" rows="4" placeholder="手順をメモしておくと後で見返せます"></textarea>
+
+        <button type="submit" id="save-recipe-btn">💾 このレシピを保存</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- レシピ一覧 -->
+  <section id="tab-list" class="tab-panel">
+    <div id="recipe-list"></div>
+  </section>
+
+  <!-- 買い物リスト作成 -->
+  <section id="tab-shopping" class="tab-panel">
+    <div class="card">
+      <h3 style="margin-top:0">作りたいレシピを選んで、人数を入力してください</h3>
+      <div id="shopping-select"></div>
+      <button id="generate-shopping-list">🛒 買い物リストを作成</button>
+    </div>
+    <div class="card" id="shopping-result-card" style="display:none">
+      <div id="shopping-result"></div>
+      <button id="download-pdf">📄 PDFでダウンロード</button>
+      <button class="print-btn" onclick="window.print()">🖨️ 印刷／ブラウザでPDF保存</button>
+    </div>
+  </section>
+
+  <!-- 会員管理（system_adminのみ） -->
+  <section id="tab-admin" class="tab-panel">
+    <div class="card">
+      <h3 style="margin-top:0">会員の権限管理</h3>
+      <p class="hint">admin にしたレシピは全会員に共有されます。system_admin はシステム全体を管理できます。</p>
+      <div id="admin-list"></div>
+    </div>
+  </section>
+</div>
+
+<footer>COCOLABO 買い物リストメーカー</footer>
 
 <script>
-const STORAGE_KEY = 'cocolabo_recipes_v1';
-const CATEGORIES = ['魚介類','肉類','野菜','調味料','その他食材'];
+/* ---------- Supabase 初期化 ---------- */
+const SUPABASE_URL = 'https://tqwkwxcbooobawycygew.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_n3XtvBDX7-lyEExEeC3dZw_i9Rg3sLJ';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-function loadRecipes(){
-  try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
-  catch(e){ return []; }
-}
-function saveRecipes(list){ localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); }
+const CATEGORIES = ['魚介類','肉類','野菜','調味料','その他食材'];
+const ROLE_LABEL = { system_admin:'システム管理者', admin:'運営者(admin)', member:'会員' };
+
+let currentUser = null;
+let currentProfile = null;
+let cachedRecipes = [];
+
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+
+/* ---------- 認証 ---------- */
+document.querySelectorAll('.auth-tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.auth-tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.auth-form').forEach(f=>f.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.authTab + '-form').classList.add('active');
+  });
+});
+
+function showAuthMessage(id, text, type){
+  const el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'auth-message show ' + type;
+}
+
+document.getElementById('signup-form').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const email = document.getElementById('signup-email').value.trim();
+  const password = document.getElementById('signup-password').value;
+  const { error } = await sb.auth.signUp({ email, password });
+  if(error){
+    showAuthMessage('signup-message', 'エラー: ' + error.message, 'error');
+  }else{
+    showAuthMessage('signup-message', '確認メールを送信しました。メール内のリンクを開いてから、ログインタブでログインしてください。', 'success');
+  }
+});
+
+document.getElementById('login-form').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){
+    showAuthMessage('login-message', 'エラー: ' + error.message, 'error');
+  }
+});
+
+document.getElementById('logout-btn').addEventListener('click', async ()=>{
+  await sb.auth.signOut();
+});
+
+/* ---------- セッション監視 ---------- */
+async function boot(){
+  const { data: { session } } = await sb.auth.getSession();
+  await handleSession(session);
+  sb.auth.onAuthStateChange(async (_event, session)=>{
+    await handleSession(session);
+  });
+}
+
+async function handleSession(session){
+  document.getElementById('loading-screen').style.display = 'none';
+  if(session && session.user){
+    currentUser = session.user;
+    const { data: profile, error } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
+    if(error){
+      // プロフィール未作成（トリガー反映待ちなど）の場合は少し待って再試行
+      await new Promise(r=>setTimeout(r,800));
+      const retry = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
+      currentProfile = retry.data;
+    }else{
+      currentProfile = profile;
+    }
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app-root').style.display = 'block';
+    document.getElementById('user-email').textContent = currentUser.email;
+    document.getElementById('user-role-badge').textContent = ROLE_LABEL[currentProfile?.role] || currentProfile?.role || '';
+    document.getElementById('admin-tab-btn').style.display = (currentProfile?.role === 'system_admin') ? 'inline-block' : 'none';
+    await refreshRecipes();
+    renderRecipeList();
+    renderShoppingSelect();
+    if(currentProfile?.role === 'system_admin') renderAdminList();
+  }else{
+    currentUser = null;
+    currentProfile = null;
+    document.getElementById('app-root').style.display = 'none';
+    document.getElementById('auth-screen').style.display = 'block';
+  }
 }
 
 /* ---------- タブ切り替え ---------- */
@@ -329,6 +549,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
     if(btn.dataset.tab === 'list') renderRecipeList();
     if(btn.dataset.tab === 'shopping') renderShoppingSelect();
+    if(btn.dataset.tab === 'admin') renderAdminList();
   });
 });
 
@@ -367,9 +588,7 @@ function setupMic(button){
 document.querySelectorAll('.mic-btn').forEach(setupMic);
 
 /* ---------- 材料行 ---------- */
-let rowCounter = 0;
 function addIngredientRow(data = {}){
-  rowCounter++;
   const wrapper = document.createElement('div');
   wrapper.className = 'ingredient-row';
   wrapper.innerHTML = `
@@ -417,8 +636,8 @@ document.getElementById('apply-voice-to-ingredients').addEventListener('click', 
   document.getElementById('voice-transcript').value = '';
 });
 
-/* ---------- レシピ保存 ---------- */
-document.getElementById('recipe-form').addEventListener('submit', (e)=>{
+/* ---------- レシピ保存（Supabase） ---------- */
+document.getElementById('recipe-form').addEventListener('submit', async (e)=>{
   e.preventDefault();
   const name = document.getElementById('recipe-name').value.trim();
   const servings = parseFloat(document.getElementById('recipe-servings').value) || 1;
@@ -438,16 +657,27 @@ document.getElementById('recipe-form').addEventListener('submit', (e)=>{
   if(!name){ alert('レシピ名を入力してください'); return; }
   if(ingredients.length === 0){ alert('材料を1つ以上入力してください'); return; }
 
-  const recipes = loadRecipes();
   const editingId = document.getElementById('editing-id').value;
+  const saveBtn = document.getElementById('save-recipe-btn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = '保存中...';
+
+  let result;
   if(editingId){
-    const idx = recipes.findIndex(r=>r.id === editingId);
-    if(idx >= 0) recipes[idx] = { id: editingId, name, servings, ingredients, steps };
+    result = await sb.from('recipes').update({ name, servings, ingredients, steps }).eq('id', editingId);
   }else{
-    recipes.push({ id: Date.now().toString(), name, servings, ingredients, steps });
+    result = await sb.from('recipes').insert({ owner_id: currentUser.id, name, servings, ingredients, steps });
   }
-  saveRecipes(recipes);
+
+  saveBtn.disabled = false;
+  saveBtn.textContent = '💾 このレシピを保存';
+
+  if(result.error){
+    alert('保存に失敗しました: ' + result.error.message);
+    return;
+  }
   resetForm();
+  await refreshRecipes();
   alert('レシピを保存しました！「レシピ一覧」から確認できます。');
 });
 
@@ -459,31 +689,41 @@ function resetForm(){
   document.getElementById('recipe-servings').value = 2;
 }
 
-/* ---------- レシピ一覧 ---------- */
+/* ---------- レシピ取得・一覧 ---------- */
+async function refreshRecipes(){
+  const { data, error } = await sb.from('recipes').select('*').order('created_at', { ascending:false });
+  cachedRecipes = error ? [] : (data || []);
+}
+
 function renderRecipeList(){
-  const recipes = loadRecipes();
   const container = document.getElementById('recipe-list');
-  if(recipes.length === 0){
+  if(cachedRecipes.length === 0){
     container.innerHTML = '<p class="empty">まだレシピが登録されていません。「レシピ登録」タブから追加してください。</p>';
     return;
   }
-  container.innerHTML = recipes.map(r=>`
+  container.innerHTML = cachedRecipes.map(r=>{
+    const isOwn = r.owner_id === currentUser.id;
+    const badge = isOwn
+      ? '<span class="owner-badge own">自分のレシピ</span>'
+      : '<span class="owner-badge shared">共有レシピ</span>';
+    const actions = isOwn
+      ? `<button onclick="editRecipe('${r.id}')">編集</button><button class="danger" onclick="deleteRecipe('${r.id}')">削除</button>`
+      : '';
+    return `
     <div class="recipe-card">
       <div class="info">
         <b>${escapeHtml(r.name)}</b>
         <span>基準 ${r.servings}人前 ／ 材料 ${r.ingredients.length}点</span>
+        <br>${badge}
       </div>
-      <div class="actions">
-        <button onclick="editRecipe('${r.id}')">編集</button>
-        <button class="danger" onclick="deleteRecipe('${r.id}')">削除</button>
-      </div>
+      <div class="actions">${actions}</div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
-function editRecipe(id){
-  const recipes = loadRecipes();
-  const r = recipes.find(x=>x.id === id);
-  if(!r) return;
+window.editRecipe = function(id){
+  const r = cachedRecipes.find(x=>x.id === id);
+  if(!r || r.owner_id !== currentUser.id) return;
   document.querySelector('.tab-btn[data-tab="register"]').click();
   document.getElementById('editing-id').value = r.id;
   document.getElementById('recipe-name').value = r.name;
@@ -492,28 +732,27 @@ function editRecipe(id){
   document.getElementById('ingredient-rows').innerHTML = '';
   r.ingredients.forEach(ing=> addIngredientRow(ing));
   window.scrollTo({top:0, behavior:'smooth'});
-}
-function deleteRecipe(id){
+};
+window.deleteRecipe = async function(id){
   if(!confirm('このレシピを削除しますか？')) return;
-  let recipes = loadRecipes();
-  recipes = recipes.filter(r=>r.id !== id);
-  saveRecipes(recipes);
+  const { error } = await sb.from('recipes').delete().eq('id', id);
+  if(error){ alert('削除に失敗しました: ' + error.message); return; }
+  await refreshRecipes();
   renderRecipeList();
-}
+};
 
 /* ---------- 買い物リスト作成 ---------- */
 function renderShoppingSelect(){
-  const recipes = loadRecipes();
   const container = document.getElementById('shopping-select');
   document.getElementById('shopping-result-card').style.display = 'none';
-  if(recipes.length === 0){
+  if(cachedRecipes.length === 0){
     container.innerHTML = '<p class="empty">レシピがまだありません。先に登録してください。</p>';
     return;
   }
-  container.innerHTML = recipes.map(r=>`
+  container.innerHTML = cachedRecipes.map(r=>`
     <div class="select-row">
       <input type="checkbox" class="shopping-check" data-id="${r.id}">
-      <label>${escapeHtml(r.name)}（基準${r.servings}人前）</label>
+      <label>${escapeHtml(r.name)}（基準${r.servings}人前）${r.owner_id !== currentUser.id ? ' <span class="owner-badge shared">共有</span>' : ''}</label>
       <input type="number" class="servings-input" data-id="${r.id}" min="1" step="1" value="${r.servings}">
       <span style="font-size:12px;color:var(--brown-soft)">人前</span>
     </div>
@@ -526,20 +765,19 @@ function roundQty(n){
 }
 
 document.getElementById('generate-shopping-list').addEventListener('click', ()=>{
-  const recipes = loadRecipes();
   const checked = Array.from(document.querySelectorAll('.shopping-check:checked'));
   if(checked.length === 0){ alert('レシピを1つ以上選んでください'); return; }
 
   const selections = checked.map(chk=>{
     const id = chk.dataset.id;
-    const recipe = recipes.find(r=>r.id === id);
+    const recipe = cachedRecipes.find(r=>r.id === id);
     const servingsInput = document.querySelector(`.servings-input[data-id="${id}"]`);
     const servings = parseFloat(servingsInput.value) || recipe.servings;
     return { recipe, servings };
   });
 
-  const merged = {};   // 分量ありの食材（合算）
-  const noted = {};    // 分量なし（適量など）の食材
+  const merged = {};
+  const noted = {};
 
   selections.forEach(({recipe, servings})=>{
     const multiplier = servings / recipe.servings;
@@ -604,9 +842,48 @@ document.getElementById('download-pdf').addEventListener('click', ()=>{
   });
 });
 
-/* 初期表示 */
-renderRecipeList();
-renderShoppingSelect();
+/* ---------- 会員管理（system_adminのみ） ---------- */
+async function renderAdminList(){
+  if(currentProfile?.role !== 'system_admin') return;
+  const container = document.getElementById('admin-list');
+  container.innerHTML = '<p class="empty">読み込み中...</p>';
+  const { data, error } = await sb.from('profiles').select('*').order('created_at', { ascending:true });
+  if(error){
+    container.innerHTML = '<p class="empty">読み込みに失敗しました: ' + escapeHtml(error.message) + '</p>';
+    return;
+  }
+  container.innerHTML = data.map(p=>`
+    <div class="admin-row">
+      <span class="email">${escapeHtml(p.email || p.id)}</span>
+      <select class="role-select" data-id="${p.id}">
+        <option value="member" ${p.role==='member'?'selected':''}>member</option>
+        <option value="admin" ${p.role==='admin'?'selected':''}>admin</option>
+        <option value="system_admin" ${p.role==='system_admin'?'selected':''}>system_admin</option>
+      </select>
+      <button class="save-role-btn" data-id="${p.id}">保存</button>
+    </div>
+  `).join('');
+  container.querySelectorAll('.save-role-btn').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.dataset.id;
+      const select = container.querySelector(`.role-select[data-id="${id}"]`);
+      const newRole = select.value;
+      btn.disabled = true;
+      btn.textContent = '...';
+      const { error } = await sb.from('profiles').update({ role: newRole }).eq('id', id);
+      btn.disabled = false;
+      btn.textContent = '保存';
+      if(error){
+        alert('更新に失敗しました: ' + error.message);
+      }else{
+        alert('権限を更新しました');
+      }
+    });
+  });
+}
+
+/* 初期化 */
+boot();
 </script>
 </body>
 </html>
