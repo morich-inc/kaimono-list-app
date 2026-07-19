@@ -343,6 +343,7 @@
       <label>パスワード</label>
       <input type="password" id="login-password" required>
       <button type="submit" class="primary-btn">ログイン</button>
+      <p class="hint" style="text-align:right; margin:10px 0 0;"><a href="#" id="forgot-password-link" style="color:var(--accent);">パスワードをお忘れですか？</a></p>
       <div class="auth-message" id="login-message"></div>
     </form>
 
@@ -515,6 +516,28 @@ document.getElementById('login-form').addEventListener('submit', async (e)=>{
 
 document.getElementById('logout-btn').addEventListener('click', async ()=>{
   await sb.auth.signOut();
+});
+
+/* ---------- パスワードをお忘れの方（ログイン画面から自分でリセットメールを送信） ---------- */
+document.getElementById('forgot-password-link').addEventListener('click', async (e)=>{
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  if(!email){
+    showAuthMessage('login-message', 'まずメールアドレスを入力してから「パスワードをお忘れですか？」を押してください', 'error');
+    return;
+  }
+  const link = document.getElementById('forgot-password-link');
+  const originalText = link.textContent;
+  link.textContent = '送信中...';
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: 'https://morich-inc.github.io/kaimono-list-app/'
+  });
+  link.textContent = originalText;
+  if(error){
+    showAuthMessage('login-message', 'エラー: ' + error.message, 'error');
+  }else{
+    showAuthMessage('login-message', 'パスワード再設定用のメールを送信しました。メール内のリンクを開くと、新しいパスワードを設定する画面が表示されます。', 'success');
+  }
 });
 
 /* ---------- パスワード変更 ---------- */
