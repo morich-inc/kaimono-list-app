@@ -1008,28 +1008,42 @@ document.getElementById('download-pdf').addEventListener('click', ()=>{
 });
 
 /* ---------- 買い物リストをコピー ---------- */
+function legacyCopyToClipboard(text){
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  let ok = false;
+  try{ ok = document.execCommand('copy'); }catch(e){ ok = false; }
+  document.body.removeChild(textarea);
+  return ok;
+}
 document.getElementById('copy-shopping-list').addEventListener('click', async ()=>{
   const btn = document.getElementById('copy-shopping-list');
   const originalText = btn.textContent;
   if(!lastShoppingListText){ return; }
-  try{
-    if(navigator.clipboard && window.isSecureContext){
-      await navigator.clipboard.writeText(lastShoppingListText);
-    }else{
-      const textarea = document.createElement('textarea');
-      textarea.value = lastShoppingListText;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
+
+  // まず同期的な方法（execCommand）を試す。失敗した場合のみ、
+  // タイムアウト付きでモダンなClipboard APIにフォールバックする
+  // （権限プロンプトが応答しない環境で無限に固まるのを防ぐため）。
+  let success = legacyCopyToClipboard(lastShoppingListText);
+
+  if(!success && navigator.clipboard && window.isSecureContext){
+    try{
+      await Promise.race([
+        navigator.clipboard.writeText(lastShoppingListText),
+        new Promise((_, reject)=> setTimeout(()=>reject(new Error('timeout')), 1500))
+      ]);
+      success = true;
+    }catch(err){
+      success = false;
     }
-    btn.textContent = '✅ コピーしました！';
-  }catch(err){
-    btn.textContent = '❌ コピーに失敗しました';
   }
+
+  btn.textContent = success ? '✅ コピーしました！' : '❌ コピーに失敗しました';
   setTimeout(()=>{ btn.textContent = originalText; }, 2000);
 });
 
