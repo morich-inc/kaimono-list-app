@@ -460,9 +460,17 @@
 
     <div class="card">
       <h3 style="margin-top:0">MOSH会員突合チェック（月次）</h3>
-      <p class="hint">MOSHから出力した会員リストのCSVファイルをアップロードすると、このアプリの会員リストと自動で突合し、退会済みなのに使える状態のままになっている人がいないか確認できます。</p>
+      <p class="hint">MOSHの会員リストと、このアプリの会員リストを突合し、退会済みなのに使える状態のままになっている人がいないか確認できます。CSVファイルをお持ちの場合はアップロード、メールアドレスの一覧をコピーできる場合は貼り付けでもチェックできます。</p>
+
+      <p class="hint" style="margin-bottom:4px"><strong>方法A：CSVファイルをアップロード</strong></p>
       <input type="file" id="mosh-csv-input" accept=".csv,text/csv">
-      <button type="button" id="mosh-check-btn" class="primary-btn">突合チェックを実行</button>
+      <button type="button" id="mosh-check-btn" class="primary-btn">ファイルで突合チェック</button>
+
+      <p class="hint" style="margin-top:16px; margin-bottom:4px"><strong>方法B：メールアドレスを貼り付け</strong></p>
+      <p class="hint" style="margin-top:0">MOSHの会員一覧画面などからメールアドレス部分をコピーして、下の欄に貼り付けてください（改行・カンマ区切りなど、そのままでOKです）。</p>
+      <textarea id="mosh-paste-input" rows="6" placeholder="例：&#10;taro@example.com&#10;hanako@example.com, jiro@example.com"></textarea>
+      <button type="button" id="mosh-check-paste-btn" class="primary-btn">貼り付けた内容で突合チェック</button>
+
       <div id="mosh-check-result"></div>
     </div>
   </section>
@@ -1036,22 +1044,15 @@ async function renderAdminList(){
 }
 
 /* ---------- MOSH会員突合チェック（system_adminのみ） ---------- */
-document.getElementById('mosh-check-btn').addEventListener('click', async ()=>{
-  const fileInput = document.getElementById('mosh-csv-input');
+async function runMoshCheck(text, emptySourceMessage){
   const resultEl = document.getElementById('mosh-check-result');
-  const file = fileInput.files[0];
-  if(!file){
-    resultEl.innerHTML = '<p class="empty">先にMOSHの会員CSVファイルを選択してください。</p>';
-    return;
-  }
   resultEl.innerHTML = '<p class="empty">確認中...</p>';
 
-  const text = await file.text();
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
   const moshEmails = new Set((text.match(emailRegex) || []).map(e => e.toLowerCase()));
 
   if(moshEmails.size === 0){
-    resultEl.innerHTML = '<p class="empty">CSVからメールアドレスを読み取れませんでした。ファイルの中身をご確認ください。</p>';
+    resultEl.innerHTML = `<p class="empty">${emptySourceMessage}</p>`;
     return;
   }
 
@@ -1144,6 +1145,27 @@ document.getElementById('mosh-check-btn').addEventListener('click', async ()=>{
       }
     });
   });
+}
+
+document.getElementById('mosh-check-btn').addEventListener('click', async ()=>{
+  const fileInput = document.getElementById('mosh-csv-input');
+  const file = fileInput.files[0];
+  if(!file){
+    document.getElementById('mosh-check-result').innerHTML = '<p class="empty">先にMOSHの会員CSVファイルを選択してください。</p>';
+    return;
+  }
+  const text = await file.text();
+  await runMoshCheck(text, 'CSVからメールアドレスを読み取れませんでした。ファイルの中身をご確認ください。');
+});
+
+document.getElementById('mosh-check-paste-btn').addEventListener('click', async ()=>{
+  const pasteInput = document.getElementById('mosh-paste-input');
+  const text = pasteInput.value;
+  if(!text.trim()){
+    document.getElementById('mosh-check-result').innerHTML = '<p class="empty">先にメールアドレスを貼り付けてください。</p>';
+    return;
+  }
+  await runMoshCheck(text, '貼り付けた内容からメールアドレスを読み取れませんでした。内容をご確認ください。');
 });
 
 /* 初期化 */
