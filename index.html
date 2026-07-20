@@ -306,12 +306,15 @@
     font-size:13px;
   }
   .admin-row:last-child{border-bottom:none;}
-  .admin-row .email{flex:1; word-break:break-all;}
+  .admin-row .email{flex:1 1 100%; word-break:break-all; margin-bottom:4px;}
   .admin-row select{width:130px; padding:6px;}
-  .admin-row .save-role-btn{
+  .admin-row button{
     border:none; background:var(--pink); color:#fff; border-radius:8px;
-    padding:6px 10px; font-size:12px; cursor:pointer;
+    padding:6px 10px; font-size:12px; cursor:pointer; white-space:nowrap;
   }
+  .admin-row button:disabled{opacity:.4; cursor:not-allowed;}
+  .admin-row button.danger{background:var(--pink-soft); color:#B14A5E;}
+  .admin-row .toggle-status-btn{background:var(--beige); color:var(--brown);}
 
   @media print{
     header, .user-bar, #password-change-panel, nav.tabs, #tab-register, #tab-list, #tab-admin, .select-row, #generate-shopping-list, #download-pdf, footer{display:none !important;}
@@ -605,6 +608,18 @@ async function handleSession(session){
     }else{
       currentProfile = profile;
     }
+
+    // プロフィールが見つからない（退会処理済み）、または利用停止中のアカウントはここで弾く
+    if(!currentProfile || currentProfile.status === 'suspended'){
+      await sb.auth.signOut();
+      currentUser = null;
+      currentProfile = null;
+      document.getElementById('app-root').style.display = 'none';
+      document.getElementById('auth-screen').style.display = 'block';
+      showAuthMessage('login-message', 'このアカウントはご利用いただけません。管理者にお問い合わせください。', 'error');
+      return;
+    }
+
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-root').style.display = 'block';
     document.getElementById('user-email').textContent = currentUser.email;
@@ -934,17 +949,27 @@ async function renderAdminList(){
     container.innerHTML = '<p class="empty">読み込みに失敗しました: ' + escapeHtml(error.message) + '</p>';
     return;
   }
-  container.innerHTML = data.map(p=>`
-    <div class="admin-row">
-      <span class="email">${escapeHtml(p.email || p.id)}</span>
-      <select class="role-select" data-id="${p.id}">
+  container.innerHTML = data.map(p=>{
+    const isSelf = p.id === currentUser.id;
+    const isSuspended = p.status === 'suspended';
+    const statusBadge = isSuspended
+      ? '<span class="owner-badge shared" style="background:var(--pink-soft);color:#B14A5E;">利用停止中</span>'
+      : '<span class="owner-badge own">利用中</span>';
+    return `
+    <div class="admin-row" style="flex-wrap:wrap;">
+      <span class="email">${escapeHtml(p.email || p.id)}<br>${statusBadge}</span>
+      <select class="role-select" data-id="${p.id}" ${isSelf?'disabled':''}>
         <option value="member" ${p.role==='member'?'selected':''}>member</option>
         <option value="admin" ${p.role==='admin'?'selected':''}>admin</option>
         <option value="system_admin" ${p.role==='system_admin'?'selected':''}>system_admin</option>
       </select>
-      <button class="save-role-btn" data-id="${p.id}">保存</button>
+      <button class="save-role-btn" data-id="${p.id}" ${isSelf?'disabled':''}>権限を保存</button>
+      <button class="toggle-status-btn" data-id="${p.id}" data-current="${p.status}" ${isSelf?'disabled':''}>${isSuspended?'利用を再開する':'資格停止にする'}</button>
+      <button class="delete-member-btn danger" data-id="${p.id}" data-email="${escapeHtml(p.email||'')}" ${isSelf?'disabled':''}>退会処理（削除）</button>
     </div>
-  `).join('');
+  `;
+  }).join('');
+
   container.querySelectorAll('.save-role-btn').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
       const id = btn.dataset.id;
@@ -954,11 +979,49 @@ async function renderAdminList(){
       btn.textContent = '...';
       const { error } = await sb.from('profiles').update({ role: newRole }).eq('id', id);
       btn.disabled = false;
-      btn.textContent = '保存';
+      btn.textContent = '権限を保存';
       if(error){
         alert('更新に失敗しました: ' + error.message);
       }else{
         alert('権限を更新しました');
+      }
+    });
+  });
+
+  container.querySelectorAll('.toggle-status-btn').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.dataset.id;
+      const isSuspended = btn.dataset.current === 'suspended';
+      const newStatus = isSuspended ? 'active' : 'suspended';
+      if(!isSuspended && !confirm('このアカウントを資格停止にしますか？\n以降ログインしてもすぐにサインアウトされ、レシピの閲覧・編集ができなくなります。')) return;
+      btn.disabled = true;
+      btn.textContent = '...';
+      const { error } = await sb.from('profiles').update({ status: newStatus }).eq('id', id);
+      if(error){
+        btn.disabled = false;
+        btn.textContent = isSuspended ? '利用を再開する' : '資格停止にする';
+        alert('更新に失敗しました: ' + error.message);
+      }else{
+        await renderAdminList();
+      }
+    });
+  });
+
+  container.querySelectorAll('.delete-member-btn').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.dataset.id;
+      const email = btn.dataset.email;
+      if(!confirm(`${email} を退会処理（削除）します。\nこの方のレシピもすべて削除され、元に戻せません。よろしいですか？`)) return;
+      btn.disabled = true;
+      btn.textContent = '...';
+      const { error } = await sb.from('profiles').delete().eq('id', id);
+      if(error){
+        btn.disabled = false;
+        btn.textContent = '退会処理（削除）';
+        alert('削除に失敗しました: ' + error.message);
+      }else{
+        alert('退会処理が完了しました。なお、ログイン用のアカウント自体はSupabase側に残るため、完全に削除したい場合は管理者にご相談ください。');
+        await renderAdminList();
       }
     });
   });
