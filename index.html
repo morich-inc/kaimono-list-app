@@ -184,7 +184,7 @@
     padding:12px;
   }
   .voice-box textarea{margin:8px 0;}
-  #apply-voice-to-ingredients, #save-recipe-btn, #generate-shopping-list, #download-pdf, .print-btn, .primary-btn{
+  #apply-voice-to-ingredients, #save-recipe-btn, #generate-shopping-list, #download-pdf, #copy-shopping-list, .print-btn, .primary-btn{
     width:100%;
     padding:12px;
     border:none;
@@ -327,7 +327,7 @@
   .admin-row .toggle-status-btn{background:var(--beige); color:var(--brown);}
 
   @media print{
-    header, .user-bar, #password-change-panel, nav.tabs, #tab-register, #tab-list, #tab-admin, .select-row, #generate-shopping-list, #download-pdf, footer{display:none !important;}
+    header, .user-bar, #password-change-panel, nav.tabs, #tab-register, #tab-list, #tab-admin, .select-row, #generate-shopping-list, #download-pdf, #copy-shopping-list, footer{display:none !important;}
     body{background:#fff;}
     #shopping-result{display:block !important;}
   }
@@ -469,6 +469,7 @@
       <div id="shopping-result"></div>
       <button id="download-pdf">📄 PDFでダウンロード</button>
       <button class="print-btn" onclick="window.print()">🖨️ 印刷／ブラウザでPDF保存</button>
+      <button id="copy-shopping-list" type="button">📋 コピー（メモアプリなどへ）</button>
     </div>
   </section>
 
@@ -506,13 +507,14 @@ const SUPABASE_URL = 'https://tqwkwxcbooobawycygew.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_n3XtvBDX7-lyEExEeC3dZw_i9Rg3sLJ';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const CATEGORIES = ['魚介類','肉類','野菜','調味料','その他食材'];
+const CATEGORIES = ['魚介類','肉類','野菜','その他','基本調味料','基本調味料以外','お好みで'];
 const PROJECT_TAGS = ['出張料理','ZOOM教室','その他プロジェクト'];
 const ROLE_LABEL = { system_admin:'システム管理者', admin:'運営者(admin)', member:'会員' };
 
 let currentUser = null;
 let currentProfile = null;
 let cachedRecipes = [];
+let lastShoppingListText = '';
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
@@ -741,7 +743,7 @@ function addIngredientRow(data = {}){
     opt.value = c; opt.textContent = c;
     select.appendChild(opt);
   });
-  select.value = data.category && CATEGORIES.includes(data.category) ? data.category : 'その他食材';
+  select.value = data.category && CATEGORIES.includes(data.category) ? data.category : 'その他';
   wrapper.querySelector('.remove-row-btn').addEventListener('click', ()=> wrapper.remove());
   document.getElementById('ingredient-rows').appendChild(wrapper);
 }
@@ -957,7 +959,7 @@ document.getElementById('generate-shopping-list').addEventListener('click', ()=>
 
   const grouped = {};
   allItems.forEach(item=>{
-    const cat = item.category || 'その他食材';
+    const cat = (item.category && CATEGORIES.includes(item.category)) ? item.category : 'その他';
     if(!grouped[cat]) grouped[cat] = [];
     grouped[cat].push(item);
   });
@@ -966,17 +968,22 @@ document.getElementById('generate-shopping-list').addEventListener('click', ()=>
   const recipeNames = selections.map(s=>s.recipe.name).join('・');
 
   let html = `<div id="shopping-result-title">🛒 買い物リスト <span class="heart">♡</span><br><span style="font-size:12px;color:var(--brown-soft);font-family:'Zen Maru Gothic'">${escapeHtml(recipeNames)}</span></div>`;
+  let text = `🛒 買い物リスト（${recipeNames}）\n`;
   order.forEach(cat=>{
     if(!grouped[cat] || grouped[cat].length === 0) return;
     html += `<div class="cat-block"><div class="cat-title">${escapeHtml(cat)}</div>`;
+    text += `\n【${cat}】\n`;
     grouped[cat].forEach(item=>{
       const qtyText = item.hasQty ? `${roundQty(item.qty)}${escapeHtml(item.unit)}` : (item.unit ? escapeHtml(item.unit) : '適量');
       html += `<div class="shopping-item"><span class="box"></span><span>${escapeHtml(item.name)}</span><span class="qty">${qtyText}</span></div>`;
+      const qtyTextPlain = item.hasQty ? `${roundQty(item.qty)}${item.unit}` : (item.unit || '適量');
+      text += `□ ${item.name}　${qtyTextPlain}\n`;
     });
     html += `</div>`;
   });
 
   document.getElementById('shopping-result').innerHTML = html;
+  lastShoppingListText = text.trim();
   document.getElementById('shopping-result-card').style.display = 'block';
   const resultCard = document.getElementById('shopping-result-card');
   if(resultCard.scrollIntoView) resultCard.scrollIntoView({behavior:'smooth'});
@@ -998,6 +1005,32 @@ document.getElementById('download-pdf').addEventListener('click', ()=>{
     windowWidth: element.scrollWidth || 600,
     html2canvas: { scale: 2, useCORS:true }
   });
+});
+
+/* ---------- 買い物リストをコピー ---------- */
+document.getElementById('copy-shopping-list').addEventListener('click', async ()=>{
+  const btn = document.getElementById('copy-shopping-list');
+  const originalText = btn.textContent;
+  if(!lastShoppingListText){ return; }
+  try{
+    if(navigator.clipboard && window.isSecureContext){
+      await navigator.clipboard.writeText(lastShoppingListText);
+    }else{
+      const textarea = document.createElement('textarea');
+      textarea.value = lastShoppingListText;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    btn.textContent = '✅ コピーしました！';
+  }catch(err){
+    btn.textContent = '❌ コピーに失敗しました';
+  }
+  setTimeout(()=>{ btn.textContent = originalText; }, 2000);
 });
 
 /* ---------- 会員管理（system_adminのみ） ---------- */
