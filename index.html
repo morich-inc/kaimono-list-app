@@ -116,6 +116,14 @@
     margin:16px 0 6px;
   }
   label:first-of-type{margin-top:0;}
+  .checkbox-label{
+    background:var(--cream, #FBF3EA);
+    border:1px solid var(--beige);
+    border-radius:10px;
+    padding:10px 12px;
+    font-weight:500;
+  }
+  .checkbox-label input[type=checkbox]{width:auto; margin:0;}
   input[type=text], input[type=number], input[type=email], input[type=password], textarea, select{
     width:100%;
     padding:10px 12px;
@@ -212,6 +220,8 @@
   }
   .owner-badge.own{background:var(--pink-soft); color:var(--accent);}
   .owner-badge.shared{background:var(--beige); color:var(--brown);}
+  .owner-badge.private{background:#5B4636; color:#fff;}
+  .owner-badge.tag{background:var(--pink-soft); color:var(--brown);}
   .recipe-card .actions{display:flex; flex-shrink:0;}
   .recipe-card .actions button{
     border:none;
@@ -403,6 +413,12 @@
         <label>基準人数（この分量は何人前か）</label>
         <input type="number" id="recipe-servings" value="2" min="1" step="1" required>
 
+        <label>タグ（プロジェクト）</label>
+        <input type="text" id="recipe-tag" list="tag-options" placeholder="例：出張料理">
+        <datalist id="tag-options">
+          <option value="出張料理"><option value="ZOOM教室"><option value="その他プロジェクト">
+        </datalist>
+
         <h3>材料</h3>
         <p class="hint">材料名・分量・単位・カテゴリを入力してください。分量が「適量」の場合は分量を空欄のままでOKです。</p>
         <div id="ingredient-rows"></div>
@@ -426,6 +442,8 @@
         <h3>作り方（任意） <button type="button" class="mic-btn" data-target="recipe-steps">🎤</button></h3>
         <textarea id="recipe-steps" rows="4" placeholder="手順をメモしておくと後で見返せます"></textarea>
 
+        <label class="checkbox-label"><input type="checkbox" id="recipe-is-private"> 🔒 このレシピを非公開にする（自分だけに表示。他の会員には共有されません）</label>
+
         <button type="submit" id="save-recipe-btn">💾 このレシピを保存</button>
       </form>
     </div>
@@ -433,6 +451,10 @@
 
   <!-- レシピ一覧 -->
   <section id="tab-list" class="tab-panel">
+    <div class="card" style="margin-bottom:12px">
+      <label style="margin-top:0">タグで絞り込み</label>
+      <select id="tag-filter"><option value="">すべて表示</option></select>
+    </div>
     <div id="recipe-list"></div>
   </section>
 
@@ -485,6 +507,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_n3XtvBDX7-lyEExEeC3dZw_i9Rg3sLJ';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const CATEGORIES = ['魚介類','肉類','野菜','調味料','その他食材'];
+const PROJECT_TAGS = ['出張料理','ZOOM教室','その他プロジェクト'];
 const ROLE_LABEL = { system_admin:'システム管理者', admin:'運営者(admin)', member:'会員' };
 
 let currentUser = null;
@@ -665,6 +688,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     if(btn.dataset.tab === 'admin') renderAdminList();
   });
 });
+document.getElementById('tag-filter').addEventListener('change', renderRecipeList);
 
 /* ---------- 音声入力 ---------- */
 function setupMic(button){
@@ -755,6 +779,8 @@ document.getElementById('recipe-form').addEventListener('submit', async (e)=>{
   const name = document.getElementById('recipe-name').value.trim();
   const servings = parseFloat(document.getElementById('recipe-servings').value) || 1;
   const steps = document.getElementById('recipe-steps').value.trim();
+  const isPrivate = document.getElementById('recipe-is-private').checked;
+  const tag = document.getElementById('recipe-tag').value.trim() || null;
   const ingredients = [];
   document.querySelectorAll('#ingredient-rows .ingredient-row').forEach(row=>{
     const iname = row.querySelector('.ing-name').value.trim();
@@ -777,9 +803,9 @@ document.getElementById('recipe-form').addEventListener('submit', async (e)=>{
 
   let result;
   if(editingId){
-    result = await sb.from('recipes').update({ name, servings, ingredients, steps }).eq('id', editingId);
+    result = await sb.from('recipes').update({ name, servings, ingredients, steps, is_private: isPrivate, tag }).eq('id', editingId);
   }else{
-    result = await sb.from('recipes').insert({ owner_id: currentUser.id, name, servings, ingredients, steps });
+    result = await sb.from('recipes').insert({ owner_id: currentUser.id, name, servings, ingredients, steps, is_private: isPrivate, tag });
   }
 
   saveBtn.disabled = false;
@@ -797,6 +823,8 @@ document.getElementById('recipe-form').addEventListener('submit', async (e)=>{
 function resetForm(){
   document.getElementById('recipe-form').reset();
   document.getElementById('editing-id').value = '';
+  document.getElementById('recipe-is-private').checked = false;
+  document.getElementById('recipe-tag').value = '';
   document.getElementById('ingredient-rows').innerHTML = '';
   addIngredientRow();
   document.getElementById('recipe-servings').value = 2;
@@ -810,15 +838,30 @@ async function refreshRecipes(){
 
 function renderRecipeList(){
   const container = document.getElementById('recipe-list');
+  const filterSelect = document.getElementById('tag-filter');
+
+  const usedTags = [...new Set(cachedRecipes.map(r=>r.tag).filter(Boolean))];
+  const allTags = [...new Set([...PROJECT_TAGS, ...usedTags])];
+  const prevValue = filterSelect.value;
+  filterSelect.innerHTML = '<option value="">すべて表示</option>' + allTags.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  filterSelect.value = allTags.includes(prevValue) ? prevValue : '';
+
+  const filtered = filterSelect.value ? cachedRecipes.filter(r=>r.tag === filterSelect.value) : cachedRecipes;
+
   if(cachedRecipes.length === 0){
     container.innerHTML = '<p class="empty">まだレシピが登録されていません。「レシピ登録」タブから追加してください。</p>';
     return;
   }
-  container.innerHTML = cachedRecipes.map(r=>{
+  if(filtered.length === 0){
+    container.innerHTML = '<p class="empty">このタグのレシピはまだありません。</p>';
+    return;
+  }
+  container.innerHTML = filtered.map(r=>{
     const isOwn = r.owner_id === currentUser.id;
     const badge = isOwn
-      ? '<span class="owner-badge own">自分のレシピ</span>'
+      ? '<span class="owner-badge own">自分のレシピ</span>' + (r.is_private ? ' <span class="owner-badge private">🔒 非公開</span>' : '')
       : '<span class="owner-badge shared">共有レシピ</span>';
+    const tagBadge = r.tag ? ` <span class="owner-badge tag">${escapeHtml(r.tag)}</span>` : '';
     const actions = isOwn
       ? `<button onclick="editRecipe('${r.id}')">編集</button><button class="danger" onclick="deleteRecipe('${r.id}')">削除</button>`
       : '';
@@ -827,7 +870,7 @@ function renderRecipeList(){
       <div class="info">
         <b>${escapeHtml(r.name)}</b>
         <span>基準 ${r.servings}人前 ／ 材料 ${r.ingredients.length}点</span>
-        <br>${badge}
+        <br>${badge}${tagBadge}
       </div>
       <div class="actions">${actions}</div>
     </div>
@@ -842,6 +885,8 @@ window.editRecipe = function(id){
   document.getElementById('recipe-name').value = r.name;
   document.getElementById('recipe-servings').value = r.servings;
   document.getElementById('recipe-steps').value = r.steps || '';
+  document.getElementById('recipe-is-private').checked = !!r.is_private;
+  document.getElementById('recipe-tag').value = r.tag || '';
   document.getElementById('ingredient-rows').innerHTML = '';
   r.ingredients.forEach(ing=> addIngredientRow(ing));
   window.scrollTo({top:0, behavior:'smooth'});
@@ -865,7 +910,7 @@ function renderShoppingSelect(){
   container.innerHTML = cachedRecipes.map(r=>`
     <div class="select-row">
       <input type="checkbox" class="shopping-check" data-id="${r.id}">
-      <label>${escapeHtml(r.name)}（基準${r.servings}人前）${r.owner_id !== currentUser.id ? ' <span class="owner-badge shared">共有</span>' : ''}</label>
+      <label>${escapeHtml(r.name)}（基準${r.servings}人前）${r.owner_id !== currentUser.id ? ' <span class="owner-badge shared">共有</span>' : ''}${r.tag ? ` <span class="owner-badge tag">${escapeHtml(r.tag)}</span>` : ''}</label>
       <input type="number" class="servings-input" data-id="${r.id}" min="1" step="1" value="${r.servings}">
       <span style="font-size:12px;color:var(--brown-soft)">人前</span>
     </div>
