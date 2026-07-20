@@ -457,6 +457,14 @@
       <p class="hint">admin にしたレシピは全会員に共有されます。system_admin はシステム全体を管理できます。</p>
       <div id="admin-list"></div>
     </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">MOSH会員突合チェック（月次）</h3>
+      <p class="hint">MOSHから出力した会員リストのCSVファイルをアップロードすると、このアプリの会員リストと自動で突合し、退会済みなのに使える状態のままになっている人がいないか確認できます。</p>
+      <input type="file" id="mosh-csv-input" accept=".csv,text/csv">
+      <button type="button" id="mosh-check-btn" class="primary-btn">突合チェックを実行</button>
+      <div id="mosh-check-result"></div>
+    </div>
   </section>
 </div>
 
@@ -1026,6 +1034,117 @@ async function renderAdminList(){
     });
   });
 }
+
+/* ---------- MOSH会員突合チェック（system_adminのみ） ---------- */
+document.getElementById('mosh-check-btn').addEventListener('click', async ()=>{
+  const fileInput = document.getElementById('mosh-csv-input');
+  const resultEl = document.getElementById('mosh-check-result');
+  const file = fileInput.files[0];
+  if(!file){
+    resultEl.innerHTML = '<p class="empty">先にMOSHの会員CSVファイルを選択してください。</p>';
+    return;
+  }
+  resultEl.innerHTML = '<p class="empty">確認中...</p>';
+
+  const text = await file.text();
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  const moshEmails = new Set((text.match(emailRegex) || []).map(e => e.toLowerCase()));
+
+  if(moshEmails.size === 0){
+    resultEl.innerHTML = '<p class="empty">CSVからメールアドレスを読み取れませんでした。ファイルの中身をご確認ください。</p>';
+    return;
+  }
+
+  const { data: profiles, error } = await sb.from('profiles').select('*').order('created_at', { ascending:true });
+  if(error){
+    resultEl.innerHTML = '<p class="empty">会員情報の取得に失敗しました: ' + escapeHtml(error.message) + '</p>';
+    return;
+  }
+
+  const needAction = [];   // アプリでは利用中だが、MOSHリストに見当たらない → 資格停止が必要かも
+  const confirmedOk = [];  // 資格停止済みで、MOSHリストにもない → 正しく処理済み
+  const reviewNeeded = []; // 資格停止済みだが、MOSHリストにはまだある → 要確認（誤って停止した可能性）
+  const fine = [];         // 利用中で、MOSHリストにもある → 問題なし
+
+  profiles.forEach(p=>{
+    const email = (p.email || '').toLowerCase();
+    const inMosh = moshEmails.has(email);
+    if(p.status === 'suspended'){
+      if(inMosh) reviewNeeded.push(p); else confirmedOk.push(p);
+    }else{
+      if(inMosh) fine.push(p); else needAction.push(p);
+    }
+  });
+
+  const appEmails = new Set(profiles.map(p => (p.email||'').toLowerCase()));
+  const unregistered = [...moshEmails].filter(e => !appEmails.has(e));
+
+  let html = '';
+  html += `<h3>要対応：MOSHリストに見当たらないのに「利用中」（${needAction.length}件）</h3>`;
+  html += needAction.length === 0
+    ? '<p class="empty">該当なし。問題ありません。</p>'
+    : needAction.map(p => `
+      <div class="admin-row">
+        <span class="email">${escapeHtml(p.email||p.id)}</span>
+        <button class="quick-suspend-btn" data-id="${p.id}">資格停止にする</button>
+      </div>
+    `).join('');
+
+  html += `<h3 style="margin-top:20px">確認OK：正しく資格停止済み（${confirmedOk.length}件）</h3>`;
+  html += confirmedOk.length === 0
+    ? '<p class="empty">該当なし</p>'
+    : `<p class="hint">${confirmedOk.map(p=>escapeHtml(p.email||p.id)).join('、')}</p>`;
+
+  if(reviewNeeded.length > 0){
+    html += `<h3 style="margin-top:20px">要確認：資格停止中だがMOSHリストには存在（${reviewNeeded.length}件）</h3>`;
+    html += reviewNeeded.map(p => `
+      <div class="admin-row">
+        <span class="email">${escapeHtml(p.email||p.id)}</span>
+        <button class="quick-reactivate-btn" data-id="${p.id}">利用を再開する</button>
+      </div>
+    `).join('');
+  }
+
+  html += `<h3 style="margin-top:20px">参考：MOSHリストにあるがアプリ未登録（${unregistered.length}件）</h3>`;
+  html += unregistered.length === 0
+    ? '<p class="empty">該当なし</p>'
+    : `<p class="hint">${unregistered.map(e=>escapeHtml(e)).join('、')}</p>`;
+
+  resultEl.innerHTML = html;
+
+  resultEl.querySelectorAll('.quick-suspend-btn').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm('このアカウントを資格停止にしますか？')) return;
+      btn.disabled = true;
+      btn.textContent = '...';
+      const { error } = await sb.from('profiles').update({ status:'suspended' }).eq('id', btn.dataset.id);
+      if(error){
+        alert('更新に失敗しました: ' + error.message);
+        btn.disabled = false;
+        btn.textContent = '資格停止にする';
+      }else{
+        btn.textContent = '停止しました';
+        renderAdminList();
+      }
+    });
+  });
+
+  resultEl.querySelectorAll('.quick-reactivate-btn').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      btn.disabled = true;
+      btn.textContent = '...';
+      const { error } = await sb.from('profiles').update({ status:'active' }).eq('id', btn.dataset.id);
+      if(error){
+        alert('更新に失敗しました: ' + error.message);
+        btn.disabled = false;
+        btn.textContent = '利用を再開する';
+      }else{
+        btn.textContent = '再開しました';
+        renderAdminList();
+      }
+    });
+  });
+});
 
 /* 初期化 */
 boot();
