@@ -441,11 +441,13 @@
           <option value="和える">和える</option>
         </select>
 
-        <label>タグ（プロジェクト）</label>
-        <input type="text" id="recipe-tag" list="tag-options" placeholder="例：出張料理">
-        <datalist id="tag-options">
-          <option value="出張料理"><option value="ZOOM教室"><option value="その他プロジェクト">
-        </datalist>
+        <div id="tag-field-wrap" style="display:none">
+          <label>タグ（プロジェクト）</label>
+          <input type="text" id="recipe-tag" list="tag-options" placeholder="例：出張料理">
+          <datalist id="tag-options">
+            <option value="出張料理"><option value="ZOOM教室"><option value="その他プロジェクト">
+          </datalist>
+        </div>
 
         <h3>材料</h3>
         <p class="hint">材料名・分量・単位・カテゴリを入力してください。分量が「適量」の場合は分量を空欄のままでOKです。</p>
@@ -470,7 +472,7 @@
         <h3>作り方（任意） <button type="button" class="mic-btn" data-target="recipe-steps">🎤</button></h3>
         <textarea id="recipe-steps" rows="4" placeholder="手順をメモしておくと後で見返せます"></textarea>
 
-        <label class="checkbox-label"><input type="checkbox" id="recipe-is-private"> 🔒 このレシピを非公開にする（自分だけに表示。他の会員には共有されません）</label>
+        <label class="checkbox-label" id="private-checkbox-label" style="display:none"><input type="checkbox" id="recipe-is-private"> 🔒 このレシピを非公開にする（自分だけに表示。他の会員には共有されません）</label>
 
         <button type="submit" id="save-recipe-btn">💾 このレシピを保存</button>
       </form>
@@ -489,8 +491,10 @@
       <label>調理方法で絞り込み</label>
       <select id="method-filter"><option value="">すべて表示</option></select>
 
-      <label>タグで絞り込み</label>
-      <select id="tag-filter"><option value="">すべて表示</option></select>
+      <div id="tag-filter-wrap" style="display:none">
+        <label>タグで絞り込み</label>
+        <select id="tag-filter"><option value="">すべて表示</option></select>
+      </div>
     </div>
     <div id="recipe-list"></div>
   </section>
@@ -705,6 +709,10 @@ async function handleSession(session){
     document.getElementById('user-email').textContent = currentUser.email;
     document.getElementById('user-role-badge').textContent = ROLE_LABEL[currentProfile?.role] || currentProfile?.role || '';
     document.getElementById('admin-tab-btn').style.display = (currentProfile?.role === 'system_admin') ? 'inline-block' : 'none';
+    const isProjectOwner = ['admin','system_admin'].includes(currentProfile?.role);
+    document.getElementById('private-checkbox-label').style.display = isProjectOwner ? 'flex' : 'none';
+    document.getElementById('tag-field-wrap').style.display = isProjectOwner ? 'block' : 'none';
+    document.getElementById('tag-filter-wrap').style.display = isProjectOwner ? 'block' : 'none';
     await refreshRecipes();
     renderRecipeList();
     renderShoppingSelect();
