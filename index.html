@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>COCOLABO 買い物リストメーカー</title>
+<title>COCOLIST | COCOLABOの買い物リスト</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;700&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -30,19 +30,49 @@
   }
   header{
     text-align:center;
-    padding:32px 16px 20px;
   }
-  header .logo{
+  .brand-banner{
+    position:relative;
+    overflow:hidden;
+    background:#B49A85;
+    padding:56px 16px 48px;
+  }
+  .brand-title{
     font-family:"Shippori Mincho",serif;
-    font-size:28px;
-    letter-spacing:.08em;
-    color:var(--brown);
+    font-size:38px;
+    letter-spacing:.28em;
+    font-weight:700;
+    color:#fff;
   }
-  header .logo .heart{color:var(--pink);}
+  .brand-divider{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:14px;
+    max-width:200px;
+    margin:16px auto;
+  }
+  .brand-divider .line{flex:1; height:1px; background:rgba(255,255,255,.75);}
+  .brand-divider .heart{font-size:16px; color:#fff; line-height:1;}
+  .brand-subtitle{
+    margin:0;
+    font-size:14px;
+    letter-spacing:.05em;
+    color:#fff;
+  }
+  .leaf{
+    position:absolute;
+    bottom:10px;
+    width:64px;
+    height:auto;
+  }
+  .leaf-left{left:18px;}
+  .leaf-right{right:18px; transform:scaleX(-1);}
   header p.tagline{
-    margin:6px 0 0;
+    margin:16px 0 0;
     font-size:13px;
     color:var(--brown-soft);
+    line-height:1.6;
   }
   .user-bar{
     max-width:640px;
@@ -154,7 +184,7 @@
   .mic-btn.listening{background:var(--pink); color:#fff;}
   .ingredient-row{
     display:grid;
-    grid-template-columns:2fr 1fr 1fr 1.2fr auto;
+    grid-template-columns:2fr 1.3fr 1.2fr auto;
     gap:6px;
     margin-bottom:8px;
     align-items:center;
@@ -338,8 +368,24 @@
 <body>
 
 <header>
-  <div class="logo">C<span class="heart">♡</span>COLABO</div>
-  <p class="tagline">レシピを登録して、人数分の買い物リストをかんたん作成</p>
+  <div class="brand-banner">
+    <svg class="leaf leaf-left" viewBox="0 0 90 110" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M10 105 L45 15" stroke="#fff" stroke-width="1.2" fill="none" opacity=".9"/>
+      <path d="M18 88 C30 82 34 72 30 62 C22 66 16 76 18 88 Z" stroke="#fff" stroke-width="1.1" fill="none" opacity=".9"/>
+      <path d="M28 66 C40 60 44 50 40 40 C32 44 26 54 28 66 Z" stroke="#fff" stroke-width="1.1" fill="none" opacity=".9"/>
+      <path d="M38 44 C50 38 54 28 50 18 C42 22 36 32 38 44 Z" stroke="#fff" stroke-width="1.1" fill="none" opacity=".9"/>
+    </svg>
+    <div class="brand-title">COCOLIST</div>
+    <div class="brand-divider"><span class="line"></span><span class="heart">♡</span><span class="line"></span></div>
+    <p class="brand-subtitle">COCOLABOの買い物リスト</p>
+    <svg class="leaf leaf-right" viewBox="0 0 90 110" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M10 105 L45 15" stroke="#fff" stroke-width="1.2" fill="none" opacity=".9"/>
+      <path d="M18 88 C30 82 34 72 30 62 C22 66 16 76 18 88 Z" stroke="#fff" stroke-width="1.1" fill="none" opacity=".9"/>
+      <path d="M28 66 C40 60 44 50 40 40 C32 44 26 54 28 66 Z" stroke="#fff" stroke-width="1.1" fill="none" opacity=".9"/>
+      <path d="M38 44 C50 38 54 28 50 18 C42 22 36 32 38 44 Z" stroke="#fff" stroke-width="1.1" fill="none" opacity=".9"/>
+    </svg>
+  </div>
+  <p class="tagline">レシピを入力するだけ。<br>買い物リストを自動で作成します。</p>
 </header>
 
 <div id="loading-screen">読み込み中...</div>
@@ -450,15 +496,16 @@
         </div>
 
         <h3>材料</h3>
-        <p class="hint">材料名・分量・単位・カテゴリを入力してください。分量が「適量」の場合は分量を空欄のままでOKです。</p>
+        <p class="hint">材料名・分量・カテゴリを入力してください。分量欄は「200g」「1/2個」「大さじ1」のように数字と単位をまとめて入力できます。「適量」の場合は分量欄にそのまま「適量」と入れてください。</p>
         <div id="ingredient-rows"></div>
         <button type="button" id="add-ingredient-row">＋ 材料を追加</button>
 
-        <datalist id="unit-options">
-          <option value="g"><option value="kg"><option value="ml"><option value="個">
-          <option value="本"><option value="枚"><option value="パック"><option value="片">
-          <option value="袋"><option value="丁"><option value="束"><option value="かけ">
-          <option value="大さじ"><option value="小さじ"><option value="適量">
+        <datalist id="qtyunit-options">
+          <option value="適量"><option value="少々">
+          <option value="1個"><option value="2個"><option value="1/2個">
+          <option value="100g"><option value="200g">
+          <option value="1本"><option value="1枚"><option value="1パック"><option value="1片">
+          <option value="大さじ1"><option value="小さじ1">
         </datalist>
 
         <h3>🎤 音声でまとめて材料入力（任意）</h3>
@@ -540,7 +587,7 @@
   </section>
 </div>
 
-<footer>COCOLABO 買い物リストメーカー</footer>
+<footer>COCOLIST（COCOLABOの買い物リスト）</footer>
 
 <script>
 /* ---------- Supabase 初期化 ---------- */
@@ -777,13 +824,46 @@ function setupMic(button){
 document.querySelectorAll('.mic-btn').forEach(setupMic);
 
 /* ---------- 材料行 ---------- */
+/* 「200g」「1/2個」「大さじ1」のような分量+単位のまとめ入力を { qty, unit } に変換する */
+function parseQtyUnit(raw){
+  const text = (raw || '').trim();
+  if(!text) return { qty:'', unit:'' };
+  // 帯分数（例：1 1/2個）
+  let m = text.match(/^(\d+)\s+(\d+)\/(\d+)\s*(.*)$/);
+  if(m){
+    const whole = parseFloat(m[1]);
+    const num = parseFloat(m[2]);
+    const den = parseFloat(m[3]);
+    return { qty: den ? whole + num/den : whole, unit: m[4].trim() };
+  }
+  // 分数（例：1/2個）
+  m = text.match(/^(\d+)\/(\d+)\s*(.*)$/);
+  if(m){
+    const num = parseFloat(m[1]);
+    const den = parseFloat(m[2]);
+    return { qty: den ? num/den : '', unit: m[3].trim() };
+  }
+  // 整数・小数（例：200g、1.5個）
+  m = text.match(/^(\d+(?:\.\d+)?)\s*(.*)$/);
+  if(m){
+    return { qty: parseFloat(m[1]), unit: m[2].trim() };
+  }
+  // 数字なし（例：適量、少々）
+  return { qty:'', unit: text };
+}
+/* { qty, unit } を分量欄に表示する文字列に戻す */
+function formatQtyUnit(data){
+  if(data.qty === '' || data.qty === undefined || data.qty === null){
+    return data.unit || '';
+  }
+  return `${data.qty}${data.unit||''}`;
+}
 function addIngredientRow(data = {}){
   const wrapper = document.createElement('div');
   wrapper.className = 'ingredient-row';
   wrapper.innerHTML = `
     <input type="text" class="ing-name" placeholder="材料名" value="${escapeHtml(data.name||'')}">
-    <input type="number" class="ing-qty" placeholder="分量" step="any" value="${data.qty ?? ''}">
-    <input type="text" class="ing-unit" list="unit-options" placeholder="単位" value="${escapeHtml(data.unit||'')}">
+    <input type="text" class="ing-qtyunit" list="qtyunit-options" placeholder="分量（例：200g、1/2個、適量）" value="${escapeHtml(formatQtyUnit(data))}">
     <select class="ing-category"></select>
     <button type="button" class="remove-row-btn">✕</button>
   `;
@@ -839,11 +919,11 @@ document.getElementById('recipe-form').addEventListener('submit', async (e)=>{
   document.querySelectorAll('#ingredient-rows .ingredient-row').forEach(row=>{
     const iname = row.querySelector('.ing-name').value.trim();
     if(!iname) return;
-    const qtyRaw = row.querySelector('.ing-qty').value;
+    const parsedQtyUnit = parseQtyUnit(row.querySelector('.ing-qtyunit').value);
     ingredients.push({
       name: iname,
-      qty: qtyRaw === '' ? '' : parseFloat(qtyRaw),
-      unit: row.querySelector('.ing-unit').value.trim(),
+      qty: parsedQtyUnit.qty,
+      unit: parsedQtyUnit.unit,
       category: row.querySelector('.ing-category').value
     });
   });
