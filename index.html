@@ -262,8 +262,24 @@
     font-size:13px;
     line-height:1.7;
     color:var(--brown);
-    white-space:pre-wrap;
   }
+  .steps-view-title{
+    font-size:12px;
+    font-weight:700;
+    color:var(--accent);
+    margin-top:8px;
+  }
+  .steps-view-title:first-child{margin-top:0;}
+  .ingredient-view-list{margin-top:4px;}
+  .ingredient-view-row{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    padding:3px 0;
+    border-bottom:1px dashed var(--beige);
+  }
+  .ingredient-view-row:last-child{border-bottom:none;}
+  .steps-view-text{white-space:pre-wrap; margin-top:4px;}
   .owner-badge{
     display:inline-block;
     font-size:11px;
@@ -1105,10 +1121,19 @@ function renderRecipeList(){
     const actions = isOwn
       ? `<button onclick="editRecipe('${r.id}')">編集</button><button class="danger" onclick="deleteRecipe('${r.id}')">削除</button>`
       : '';
-    const stepsBlock = r.steps ? `
-      <button type="button" class="steps-toggle-btn" onclick="toggleSteps('${r.id}')">📖 作り方を見る</button>
-      <div class="recipe-steps-view" id="steps-${r.id}" style="display:none">${escapeHtml(r.steps)}</div>
-    ` : '';
+    const ingredientRows = r.ingredients.map(ing=>{
+      const hasQty = ing.qty !== '' && ing.qty !== null && ing.qty !== undefined && !isNaN(ing.qty);
+      const qtyUnit = hasQty ? `${roundQty(ing.qty)}${ing.unit || ''}` : (ing.unit || '適量');
+      return `<div class="ingredient-view-row"><span>${escapeHtml(ing.name)}</span><span>${escapeHtml(qtyUnit)}</span></div>`;
+    }).join('');
+    const stepsBlock = `
+      <button type="button" class="steps-toggle-btn" onclick="toggleSteps('${r.id}')">📖 材料・作り方を見る</button>
+      <div class="recipe-steps-view" id="steps-${r.id}" style="display:none">
+        <div class="steps-view-title">材料（基準${r.servings}人前）</div>
+        <div class="ingredient-view-list">${ingredientRows}</div>
+        ${r.steps ? `<div class="steps-view-title">作り方</div><div class="steps-view-text">${escapeHtml(r.steps)}</div>` : ''}
+      </div>
+    `;
     return `
     <div class="recipe-card">
       <div class="card-top">
@@ -1273,15 +1298,16 @@ document.getElementById('generate-shopping-list').addEventListener('click', ()=>
   selections.forEach(({recipe, servings})=>{
     const multiplier = servings / recipe.servings;
     recipe.ingredients.forEach(ing=>{
-      const unit = ing.unit || '';
+      const name = (ing.name || '').trim();
+      const unit = (ing.unit || '').trim();
       const hasQty = ing.qty !== '' && ing.qty !== null && !isNaN(ing.qty);
       if(hasQty){
-        const key = ing.name + '|' + unit;
-        if(!merged[key]) merged[key] = { name: ing.name, unit, qty: 0, category: ing.category };
+        const key = name + '|' + unit;
+        if(!merged[key]) merged[key] = { name, unit, qty: 0, category: ing.category };
         merged[key].qty += ing.qty * multiplier;
       }else{
-        const key = ing.name + '|' + unit + '|note';
-        if(!noted[key]) noted[key] = { name: ing.name, unit, category: ing.category };
+        const key = name + '|' + unit + '|note';
+        if(!noted[key]) noted[key] = { name, unit, category: ing.category };
       }
     });
   });
