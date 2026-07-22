@@ -233,14 +233,37 @@
     border-radius:14px;
     padding:14px 16px;
     margin-bottom:10px;
+    box-shadow:0 2px 8px rgba(91,70,54,.05);
+  }
+  .recipe-card .card-top{
     display:flex;
     justify-content:space-between;
     align-items:center;
-    box-shadow:0 2px 8px rgba(91,70,54,.05);
     gap:10px;
   }
   .recipe-card .info b{display:block; font-size:15px;}
   .recipe-card .info span{font-size:12px; color:var(--brown-soft);}
+  .steps-toggle-btn{
+    border:none;
+    background:none;
+    color:var(--accent);
+    font-size:12px;
+    font-weight:700;
+    padding:0;
+    margin-top:10px;
+    cursor:pointer;
+    text-decoration:underline;
+  }
+  .recipe-steps-view{
+    margin-top:8px;
+    background:var(--cream);
+    border-radius:10px;
+    padding:10px 12px;
+    font-size:13px;
+    line-height:1.7;
+    color:var(--brown);
+    white-space:pre-wrap;
+  }
   .owner-badge{
     display:inline-block;
     font-size:11px;
@@ -277,6 +300,29 @@
   .select-row:last-child{border-bottom:none;}
   .select-row label{margin:0; font-weight:500; flex:1;}
   .select-row .servings-input{width:70px;}
+  .select-row.checked{background:var(--pink-soft);}
+  #shopping-selected-bar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:var(--cream);
+    border-radius:10px;
+    padding:10px 12px;
+    font-size:13px;
+    font-weight:700;
+    color:var(--brown);
+  }
+  #shopping-clear-selection{
+    border:none;
+    background:var(--beige);
+    color:var(--brown);
+    border-radius:8px;
+    padding:5px 10px;
+    font-size:12px;
+    font-weight:500;
+    cursor:pointer;
+    margin:0;
+  }
   .cat-block{margin-bottom:18px;}
   .cat-title{
     font-family:"Shippori Mincho",serif;
@@ -359,7 +405,7 @@
   .admin-row .toggle-status-btn{background:var(--beige); color:var(--brown);}
 
   @media print{
-    header, .user-bar, #password-change-panel, nav.tabs, #tab-register, #tab-list, #tab-admin, .select-row, #generate-shopping-list, #download-pdf, #copy-shopping-list, footer{display:none !important;}
+    header, .user-bar, #password-change-panel, nav.tabs, #tab-register, #tab-list, #tab-admin, #shopping-filter-card, #shopping-select-card, .select-row, #generate-shopping-list, #download-pdf, #copy-shopping-list, footer{display:none !important;}
     body{background:#fff;}
     #shopping-result{display:block !important;}
   }
@@ -548,10 +594,31 @@
 
   <!-- 買い物リスト作成 -->
   <section id="tab-shopping" class="tab-panel">
-    <div class="card">
-      <h3 style="margin-top:0">作りたいレシピを選んで、人数を入力してください</h3>
+    <div class="card" id="shopping-filter-card" style="margin-bottom:12px">
+      <h3 style="margin-top:0">🔍 レシピを検索してチェック</h3>
+      <p class="hint">検索・絞り込みをしても、一度チェックしたレシピの選択は解除されません。条件を変えて検索し直し、チェックを重ねてから最後にまとめて作成できます。</p>
+      <label style="margin-top:0">フリーワード検索</label>
+      <input type="text" id="shopping-search" placeholder="レシピ名・材料名で検索">
+
+      <label>カテゴリで絞り込み</label>
+      <select id="shopping-category-filter"><option value="">すべて表示</option></select>
+
+      <label>調理方法で絞り込み</label>
+      <select id="shopping-method-filter"><option value="">すべて表示</option></select>
+
+      <div id="shopping-tag-filter-wrap" style="display:none">
+        <label>タグで絞り込み</label>
+        <select id="shopping-tag-filter"><option value="">すべて表示</option></select>
+      </div>
+    </div>
+    <div class="card" id="shopping-select-card">
+      <div id="shopping-selected-bar">
+        <span id="shopping-selected-count">選択中：0件</span>
+        <button type="button" id="shopping-clear-selection">選択をクリア</button>
+      </div>
+      <h3 style="margin-top:12px">人数を確認してチェックしてください</h3>
       <div id="shopping-select"></div>
-      <button id="generate-shopping-list">🛒 買い物リストを作成</button>
+      <button id="generate-shopping-list">🛒 まとめて買い物リストを作成</button>
     </div>
     <div class="card" id="shopping-result-card" style="display:none">
       <div id="shopping-result"></div>
@@ -605,6 +672,8 @@ let currentUser = null;
 let currentProfile = null;
 let cachedRecipes = [];
 let lastShoppingListText = '';
+let selectedShoppingIds = new Set();
+let shoppingServingsMap = new Map();
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
@@ -760,6 +829,7 @@ async function handleSession(session){
     document.getElementById('private-checkbox-label').style.display = isProjectOwner ? 'flex' : 'none';
     document.getElementById('tag-field-wrap').style.display = isProjectOwner ? 'block' : 'none';
     document.getElementById('tag-filter-wrap').style.display = isProjectOwner ? 'block' : 'none';
+    document.getElementById('shopping-tag-filter-wrap').style.display = isProjectOwner ? 'block' : 'none';
     await refreshRecipes();
     renderRecipeList();
     renderShoppingSelect();
@@ -788,6 +858,11 @@ document.getElementById('tag-filter').addEventListener('change', renderRecipeLis
 document.getElementById('category-filter').addEventListener('change', renderRecipeList);
 document.getElementById('method-filter').addEventListener('change', renderRecipeList);
 document.getElementById('recipe-search').addEventListener('input', renderRecipeList);
+
+document.getElementById('shopping-tag-filter').addEventListener('change', renderShoppingSelect);
+document.getElementById('shopping-category-filter').addEventListener('change', renderShoppingSelect);
+document.getElementById('shopping-method-filter').addEventListener('change', renderShoppingSelect);
+document.getElementById('shopping-search').addEventListener('input', renderShoppingSelect);
 
 /* ---------- 音声入力 ---------- */
 function setupMic(button){
@@ -1030,14 +1105,21 @@ function renderRecipeList(){
     const actions = isOwn
       ? `<button onclick="editRecipe('${r.id}')">編集</button><button class="danger" onclick="deleteRecipe('${r.id}')">削除</button>`
       : '';
+    const stepsBlock = r.steps ? `
+      <button type="button" class="steps-toggle-btn" onclick="toggleSteps('${r.id}')">📖 作り方を見る</button>
+      <div class="recipe-steps-view" id="steps-${r.id}" style="display:none">${escapeHtml(r.steps)}</div>
+    ` : '';
     return `
     <div class="recipe-card">
-      <div class="info">
-        <b>${escapeHtml(r.name)}</b>
-        <span>基準 ${r.servings}人前 ／ 材料 ${r.ingredients.length}点</span>
-        <br>${badge}${categoryBadge}${methodBadge}${tagBadge}
+      <div class="card-top">
+        <div class="info">
+          <b>${escapeHtml(r.name)}</b>
+          <span>基準 ${r.servings}人前 ／ 材料 ${r.ingredients.length}点</span>
+          <br>${badge}${categoryBadge}${methodBadge}${tagBadge}
+        </div>
+        <div class="actions">${actions}</div>
       </div>
-      <div class="actions">${actions}</div>
+      ${stepsBlock}
     </div>
   `;
   }).join('');
@@ -1058,6 +1140,11 @@ window.editRecipe = function(id){
   r.ingredients.forEach(ing=> addIngredientRow(ing));
   window.scrollTo({top:0, behavior:'smooth'});
 };
+window.toggleSteps = function(id){
+  const el = document.getElementById('steps-' + id);
+  if(!el) return;
+  el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+};
 window.deleteRecipe = async function(id){
   if(!confirm('このレシピを削除しますか？')) return;
   const { error } = await sb.from('recipes').delete().eq('id', id);
@@ -1067,22 +1154,103 @@ window.deleteRecipe = async function(id){
 };
 
 /* ---------- 買い物リスト作成 ---------- */
+function updateShoppingSelectedCount(){
+  document.getElementById('shopping-selected-count').textContent = `選択中：${selectedShoppingIds.size}件`;
+}
+
 function renderShoppingSelect(){
   const container = document.getElementById('shopping-select');
   document.getElementById('shopping-result-card').style.display = 'none';
+
+  // 削除済みレシピの選択状態は掃除しておく
+  const validIds = new Set(cachedRecipes.map(r=>r.id));
+  Array.from(selectedShoppingIds).forEach(id=>{ if(!validIds.has(id)) selectedShoppingIds.delete(id); });
+
   if(cachedRecipes.length === 0){
     container.innerHTML = '<p class="empty">レシピがまだありません。先に登録してください。</p>';
+    updateShoppingSelectedCount();
     return;
   }
-  container.innerHTML = cachedRecipes.map(r=>`
-    <div class="select-row">
-      <input type="checkbox" class="shopping-check" data-id="${r.id}">
+
+  const tagSelect = document.getElementById('shopping-tag-filter');
+  const categorySelect = document.getElementById('shopping-category-filter');
+  const methodSelect = document.getElementById('shopping-method-filter');
+  const searchInput = document.getElementById('shopping-search');
+
+  const usedTags = [...new Set(cachedRecipes.map(r=>r.tag).filter(Boolean))];
+  const allTags = [...new Set([...PROJECT_TAGS, ...usedTags])];
+  const prevTag = tagSelect.value;
+  tagSelect.innerHTML = '<option value="">すべて表示</option>' + allTags.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+  tagSelect.value = allTags.includes(prevTag) ? prevTag : '';
+
+  const usedCategories = [...new Set(cachedRecipes.map(r=>r.category).filter(Boolean))];
+  const allCategories = [...new Set([...RECIPE_CATEGORIES, ...usedCategories])];
+  const prevCategory = categorySelect.value;
+  categorySelect.innerHTML = '<option value="">すべて表示</option>' + allCategories.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  categorySelect.value = allCategories.includes(prevCategory) ? prevCategory : '';
+
+  const usedMethods = [...new Set(cachedRecipes.map(r=>r.cooking_method).filter(Boolean))];
+  const allMethods = [...new Set([...COOKING_METHODS, ...usedMethods])];
+  const prevMethod = methodSelect.value;
+  methodSelect.innerHTML = '<option value="">すべて表示</option>' + allMethods.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+  methodSelect.value = allMethods.includes(prevMethod) ? prevMethod : '';
+
+  const keyword = (searchInput.value || '').trim().toLowerCase();
+
+  const filtered = cachedRecipes.filter(r=>{
+    if(tagSelect.value && r.tag !== tagSelect.value) return false;
+    if(categorySelect.value && r.category !== categorySelect.value) return false;
+    if(methodSelect.value && r.cooking_method !== methodSelect.value) return false;
+    if(keyword){
+      const nameMatch = (r.name || '').toLowerCase().includes(keyword);
+      const ingredientMatch = (r.ingredients || []).some(ing => (ing.name || '').toLowerCase().includes(keyword));
+      if(!nameMatch && !ingredientMatch) return false;
+    }
+    return true;
+  });
+
+  if(filtered.length === 0){
+    container.innerHTML = '<p class="empty">条件に一致するレシピが見つかりませんでした。</p>';
+    updateShoppingSelectedCount();
+    return;
+  }
+
+  container.innerHTML = filtered.map(r=>{
+    const isChecked = selectedShoppingIds.has(r.id);
+    const servingsValue = shoppingServingsMap.has(r.id) ? shoppingServingsMap.get(r.id) : r.servings;
+    return `
+    <div class="select-row${isChecked ? ' checked' : ''}">
+      <input type="checkbox" class="shopping-check" data-id="${r.id}" ${isChecked ? 'checked' : ''}>
       <label>${escapeHtml(r.name)}（基準${r.servings}人前）${r.owner_id !== currentUser.id ? ' <span class="owner-badge shared">共有</span>' : ''}${r.tag ? ` <span class="owner-badge tag">${escapeHtml(r.tag)}</span>` : ''}</label>
-      <input type="number" class="servings-input" data-id="${r.id}" min="1" step="1" value="${r.servings}">
+      <input type="number" class="servings-input" data-id="${r.id}" min="1" step="1" value="${servingsValue}">
       <span style="font-size:12px;color:var(--brown-soft)">人前</span>
     </div>
-  `).join('');
+  `;
+  }).join('');
+  updateShoppingSelectedCount();
 }
+
+document.getElementById('shopping-select').addEventListener('change', (e)=>{
+  if(!e.target.classList.contains('shopping-check')) return;
+  const id = e.target.dataset.id;
+  if(e.target.checked){
+    selectedShoppingIds.add(id);
+    e.target.closest('.select-row').classList.add('checked');
+  }else{
+    selectedShoppingIds.delete(id);
+    e.target.closest('.select-row').classList.remove('checked');
+  }
+  updateShoppingSelectedCount();
+});
+document.getElementById('shopping-select').addEventListener('input', (e)=>{
+  if(!e.target.classList.contains('servings-input')) return;
+  shoppingServingsMap.set(e.target.dataset.id, e.target.value);
+});
+document.getElementById('shopping-clear-selection').addEventListener('click', ()=>{
+  selectedShoppingIds.clear();
+  shoppingServingsMap.clear();
+  renderShoppingSelect();
+});
 
 function roundQty(n){
   const rounded = Math.round(n * 10) / 10;
@@ -1090,16 +1258,14 @@ function roundQty(n){
 }
 
 document.getElementById('generate-shopping-list').addEventListener('click', ()=>{
-  const checked = Array.from(document.querySelectorAll('.shopping-check:checked'));
-  if(checked.length === 0){ alert('レシピを1つ以上選んでください'); return; }
+  if(selectedShoppingIds.size === 0){ alert('レシピを1つ以上選んでください'); return; }
 
-  const selections = checked.map(chk=>{
-    const id = chk.dataset.id;
+  const selections = Array.from(selectedShoppingIds).map(id=>{
     const recipe = cachedRecipes.find(r=>r.id === id);
-    const servingsInput = document.querySelector(`.servings-input[data-id="${id}"]`);
-    const servings = parseFloat(servingsInput.value) || recipe.servings;
+    const rawServings = shoppingServingsMap.has(id) ? shoppingServingsMap.get(id) : recipe.servings;
+    const servings = parseFloat(rawServings) || recipe.servings;
     return { recipe, servings };
-  });
+  }).filter(s=>s.recipe);
 
   const merged = {};
   const noted = {};
