@@ -427,6 +427,9 @@
   .admin-row button:disabled{opacity:.4; cursor:not-allowed;}
   .admin-row button.danger{background:var(--pink-soft); color:#B14A5E;}
   .admin-row .toggle-status-btn{background:var(--beige); color:var(--brown);}
+  .admin-row .name-input{width:140px; padding:6px; font-size:13px;}
+  .admin-row .save-name-btn{background:var(--beige); color:var(--brown);}
+  #admin-search{margin-bottom:12px;}
 
   @media print{
     header, .user-bar, #password-change-panel, nav.tabs, #tab-register, #tab-list, #tab-admin, #shopping-filter-card, #shopping-select-card, .select-row, #generate-shopping-list, #download-pdf, #copy-shopping-list, footer{display:none !important;}
@@ -479,6 +482,8 @@
     </form>
 
     <form id="signup-form" class="auth-form">
+      <label>お名前</label>
+      <input type="text" id="signup-name" required>
       <label>メールアドレス</label>
       <input type="email" id="signup-email" required>
       <label>パスワード（6文字以上）</label>
@@ -657,6 +662,8 @@
     <div class="card">
       <h3 style="margin-top:0">会員の権限管理</h3>
       <p class="hint">admin にしたレシピは全会員に共有されます。system_admin はシステム全体を管理できます。</p>
+      <label>名前・メールアドレスで検索</label>
+      <input type="text" id="admin-search" placeholder="名前またはメールアドレスの一部を入力">
       <div id="admin-list"></div>
     </div>
 
@@ -721,9 +728,10 @@ function showAuthMessage(id, text, type){
 
 document.getElementById('signup-form').addEventListener('submit', async (e)=>{
   e.preventDefault();
+  const name = document.getElementById('signup-name').value.trim();
   const email = document.getElementById('signup-email').value.trim();
   const password = document.getElementById('signup-password').value;
-  const { error } = await sb.auth.signUp({ email, password });
+  const { error } = await sb.auth.signUp({ email, password, options: { data: { name } } });
   if(error){
     showAuthMessage('signup-message', 'エラー: ' + error.message, 'error');
   }else{
@@ -1413,6 +1421,8 @@ document.getElementById('copy-shopping-list').addEventListener('click', async ()
 });
 
 /* ---------- 会員管理（system_adminのみ） ---------- */
+let cachedAdminProfiles = [];
+
 async function renderAdminList(){
   if(currentProfile?.role !== 'system_admin') return;
   const container = document.getElementById('admin-list');
@@ -1422,6 +1432,25 @@ async function renderAdminList(){
     container.innerHTML = '<p class="empty">読み込みに失敗しました: ' + escapeHtml(error.message) + '</p>';
     return;
   }
+  cachedAdminProfiles = data;
+  renderAdminListFiltered();
+}
+
+function renderAdminListFiltered(){
+  const container = document.getElementById('admin-list');
+  const keyword = (document.getElementById('admin-search').value || '').trim().toLowerCase();
+  const data = cachedAdminProfiles.filter(p=>{
+    if(!keyword) return true;
+    const email = (p.email || '').toLowerCase();
+    const name = (p.name || '').toLowerCase();
+    return email.includes(keyword) || name.includes(keyword);
+  });
+
+  if(data.length === 0){
+    container.innerHTML = '<p class="empty">該当する会員が見つかりません</p>';
+    return;
+  }
+
   container.innerHTML = data.map(p=>{
     const isSelf = p.id === currentUser.id;
     const isSuspended = p.status === 'suspended';
@@ -1431,6 +1460,8 @@ async function renderAdminList(){
     return `
     <div class="admin-row" style="flex-wrap:wrap;">
       <span class="email">${escapeHtml(p.email || p.id)}<br>${statusBadge}</span>
+      <input type="text" class="name-input" data-id="${p.id}" value="${escapeHtml(p.name || '')}" placeholder="名前未登録">
+      <button class="save-name-btn" data-id="${p.id}">名前を保存</button>
       <select class="role-select" data-id="${p.id}" ${isSelf?'disabled':''}>
         <option value="member" ${p.role==='member'?'selected':''}>member</option>
         <option value="admin" ${p.role==='admin'?'selected':''}>admin</option>
@@ -1442,6 +1473,26 @@ async function renderAdminList(){
     </div>
   `;
   }).join('');
+
+  container.querySelectorAll('.save-name-btn').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const id = btn.dataset.id;
+      const input = container.querySelector(`.name-input[data-id="${id}"]`);
+      const newName = input.value.trim();
+      btn.disabled = true;
+      btn.textContent = '...';
+      const { error } = await sb.from('profiles').update({ name: newName }).eq('id', id);
+      btn.disabled = false;
+      btn.textContent = '名前を保存';
+      if(error){
+        alert('更新に失敗しました: ' + error.message);
+      }else{
+        const target = cachedAdminProfiles.find(p=>p.id === id);
+        if(target) target.name = newName;
+        alert('名前を更新しました');
+      }
+    });
+  });
 
   container.querySelectorAll('.save-role-btn').forEach(btn=>{
     btn.addEventListener('click', async ()=>{
@@ -1499,6 +1550,8 @@ async function renderAdminList(){
     });
   });
 }
+
+document.getElementById('admin-search').addEventListener('input', renderAdminListFiltered);
 
 /* ---------- MOSH会員突合チェック（system_adminのみ） ---------- */
 async function runMoshCheck(text, emptySourceMessage){
