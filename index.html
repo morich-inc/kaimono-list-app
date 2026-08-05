@@ -363,12 +363,6 @@
     padding:6px 0;
     font-size:14px;
   }
-  .shopping-item .box{
-    width:16px; height:16px;
-    border:1.5px solid var(--accent);
-    border-radius:4px;
-    flex-shrink:0;
-  }
   .shopping-item .qty{color:var(--brown-soft); font-size:12px;}
   #shopping-result-title{
     text-align:center;
@@ -1298,6 +1292,14 @@ function roundQty(n){
   return rounded % 1 === 0 ? rounded.toString() : rounded.toFixed(1);
 }
 
+/* 材料名の先頭についた「A」「B」などのグループラベル（A塩、B：醤油、（Ａ）みりん 等）を
+   無視して同じ材料として扱うための正規化 */
+function normalizeIngredientName(name){
+  const trimmed = (name || '').trim();
+  const stripped = trimmed.replace(/^[\(（]?[A-Za-zＡ-Ｚａ-ｚ][\)）]?[\s　:：、,，.．\-]*/, '');
+  return stripped.trim() || trimmed;
+}
+
 document.getElementById('generate-shopping-list').addEventListener('click', ()=>{
   if(selectedShoppingIds.size === 0){ alert('レシピを1つ以上選んでください'); return; }
 
@@ -1314,12 +1316,12 @@ document.getElementById('generate-shopping-list').addEventListener('click', ()=>
   selections.forEach(({recipe, servings})=>{
     const multiplier = servings / recipe.servings;
     recipe.ingredients.forEach(ing=>{
-      const name = (ing.name || '').trim();
+      const name = normalizeIngredientName(ing.name);
       const unit = (ing.unit || '').trim();
       const hasQty = ing.qty !== '' && ing.qty !== null && !isNaN(ing.qty);
       if(hasQty){
         const key = name + '|' + unit;
-        if(!merged[key]) merged[key] = { name, unit, qty: 0, category: ing.category };
+        if(!merged[key]) merged[key] = { name, unit, qty: 0, category: ing.category, plus:false };
         merged[key].qty += ing.qty * multiplier;
       }else{
         const key = name + '|' + unit + '|note';
@@ -1328,7 +1330,20 @@ document.getElementById('generate-shopping-list').addEventListener('click', ()=>
     });
   });
 
-  const allItems = [...Object.values(merged).map(i=>({...i, hasQty:true})), ...Object.values(noted).map(i=>({...i, hasQty:false}))];
+  /* 「少々」「適量」など数量化できない追記は、同じ材料の数量入り項目があれば
+     その項目に「超」を付けて吸収し、無ければ従来通り別行で表示する */
+  Object.values(noted).forEach(note=>{
+    const matches = Object.values(merged).filter(m=>m.name === note.name);
+    if(matches.length > 0){
+      matches.forEach(m=> m.plus = true);
+      note.absorbed = true;
+    }
+  });
+
+  const allItems = [
+    ...Object.values(merged).map(i=>({...i, hasQty:true})),
+    ...Object.values(noted).filter(n=>!n.absorbed).map(i=>({...i, hasQty:false}))
+  ];
 
   const grouped = {};
   allItems.forEach(item=>{
@@ -1347,10 +1362,10 @@ document.getElementById('generate-shopping-list').addEventListener('click', ()=>
     html += `<div class="cat-block"><div class="cat-title">${escapeHtml(cat)}</div>`;
     text += `\n【${cat}】\n`;
     grouped[cat].forEach(item=>{
-      const qtyText = item.hasQty ? `${roundQty(item.qty)}${escapeHtml(item.unit)}` : (item.unit ? escapeHtml(item.unit) : '適量');
-      html += `<div class="shopping-item"><span class="box"></span><span>${escapeHtml(item.name)}</span><span class="qty">${qtyText}</span></div>`;
-      const qtyTextPlain = item.hasQty ? `${roundQty(item.qty)}${item.unit}` : (item.unit || '適量');
-      text += `□ ${item.name}　${qtyTextPlain}\n`;
+      const qtyText = item.hasQty ? `${roundQty(item.qty)}${escapeHtml(item.unit)}${item.plus ? '超' : ''}` : (item.unit ? escapeHtml(item.unit) : '適量');
+      html += `<div class="shopping-item"><span>${escapeHtml(item.name)}</span><span class="qty">${qtyText}</span></div>`;
+      const qtyTextPlain = item.hasQty ? `${roundQty(item.qty)}${item.unit}${item.plus ? '超' : ''}` : (item.unit || '適量');
+      text += `${item.name}　${qtyTextPlain}\n`;
     });
     html += `</div>`;
   });
