@@ -925,10 +925,37 @@ function setupMic(button){
 document.querySelectorAll('.mic-btn').forEach(setupMic);
 
 /* ---------- 材料行 ---------- */
+/* 「大さじ1」「小さじ1/2」「カップ1」のように単位が数字より前にくる場合の単位一覧 */
+const PREFIX_UNITS = ['大さじ','小さじ','カップ'];
+/* 数字部分（整数・小数・分数・帯分数）だけを解析する */
+function parsePlainNumber(text){
+  const t = (text || '').trim();
+  if(!t) return null;
+  let m = t.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+  if(m){
+    const whole = parseFloat(m[1]), num = parseFloat(m[2]), den = parseFloat(m[3]);
+    return den ? whole + num/den : whole;
+  }
+  m = t.match(/^(\d+)\/(\d+)$/);
+  if(m){
+    const num = parseFloat(m[1]), den = parseFloat(m[2]);
+    return den ? num/den : null;
+  }
+  m = t.match(/^(\d+(?:\.\d+)?)$/);
+  if(m) return parseFloat(m[1]);
+  return null;
+}
 /* 「200g」「1/2個」「大さじ1」のような分量+単位のまとめ入力を { qty, unit } に変換する */
 function parseQtyUnit(raw){
   const text = (raw || '').trim();
   if(!text) return { qty:'', unit:'' };
+  // 単位が先に来るパターン（例：大さじ1、小さじ1/2、カップ1）
+  for(const u of PREFIX_UNITS){
+    if(text.startsWith(u)){
+      const num = parsePlainNumber(text.slice(u.length));
+      if(num !== null) return { qty: num, unit: u };
+    }
+  }
   // 帯分数（例：1 1/2個）
   let m = text.match(/^(\d+)\s+(\d+)\/(\d+)\s*(.*)$/);
   if(m){
@@ -956,6 +983,9 @@ function parseQtyUnit(raw){
 function formatQtyUnit(data){
   if(data.qty === '' || data.qty === undefined || data.qty === null){
     return data.unit || '';
+  }
+  if(PREFIX_UNITS.includes(data.unit)){
+    return `${data.unit}${data.qty}`;
   }
   return `${data.qty}${data.unit||''}`;
 }
