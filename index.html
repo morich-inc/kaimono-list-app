@@ -425,6 +425,26 @@
   .admin-row .save-name-btn{background:var(--beige); color:var(--brown);}
   #admin-search{margin-bottom:12px;}
 
+  .taxonomy-block{margin-bottom:20px;}
+  .taxonomy-block:last-child{margin-bottom:0;}
+  .taxonomy-block h4{margin:0 0 8px; font-size:14px; color:var(--brown);}
+  .taxonomy-item{
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--cream); border-radius:20px;
+    padding:5px 6px 5px 12px; margin:0 6px 6px 0; font-size:13px;
+  }
+  .taxonomy-item button{
+    border:none; background:var(--pink-soft); color:#B14A5E;
+    border-radius:50%; width:20px; height:20px; font-size:11px;
+    cursor:pointer; line-height:1; padding:0;
+  }
+  .taxonomy-add-row{display:flex; gap:8px;}
+  .taxonomy-add-row input{flex:1; padding:8px; margin:0;}
+  .taxonomy-add-row button{
+    border:none; background:var(--pink); color:#fff; border-radius:8px;
+    padding:8px 14px; font-size:13px; cursor:pointer; white-space:nowrap; margin:0;
+  }
+
   @media print{
     header, .user-bar, #password-change-panel, nav.tabs, #tab-register, #tab-list, #tab-admin, #shopping-filter-card, #shopping-select-card, .select-row, #generate-shopping-list, #download-pdf, #copy-shopping-list, footer{display:none !important;}
     body{background:#fff;}
@@ -546,22 +566,12 @@
         <label>調理方法</label>
         <select id="recipe-cooking-method">
           <option value="">選択してください</option>
-          <option value="焼く">焼く</option>
-          <option value="煮る">煮る</option>
-          <option value="炒める">炒める</option>
-          <option value="揚げる">揚げる</option>
-          <option value="茹でる">茹でる</option>
-          <option value="蒸す">蒸す</option>
-          <option value="生（サラダ等）">生（サラダ等）</option>
-          <option value="和える">和える</option>
         </select>
 
         <div id="tag-field-wrap" style="display:none">
           <label>タグ（プロジェクト）</label>
           <input type="text" id="recipe-tag" list="tag-options" placeholder="例：出張料理">
-          <datalist id="tag-options">
-            <option value="出張料理"><option value="ZOOM教室"><option value="その他プロジェクト">
-          </datalist>
+          <datalist id="tag-options"></datalist>
         </div>
 
         <h3>材料</h3>
@@ -662,6 +672,29 @@
     </div>
 
     <div class="card">
+      <h3 style="margin-top:0">タグ・調理方法の管理</h3>
+      <p class="hint">ここで追加・削除した内容は、レシピ登録画面の選択肢やレシピ検索の絞り込みにすぐ反映されます。削除しても、既にレシピに設定済みの値自体は消えません（今後の選択肢から外れるだけです）。</p>
+
+      <div class="taxonomy-block">
+        <h4>タグ（プロジェクト）</h4>
+        <div id="tag-manage-list"></div>
+        <div class="taxonomy-add-row">
+          <input type="text" id="new-tag-input" placeholder="新しいタグ名">
+          <button type="button" id="add-tag-btn">＋ 追加</button>
+        </div>
+      </div>
+
+      <div class="taxonomy-block">
+        <h4>調理方法</h4>
+        <div id="method-manage-list"></div>
+        <div class="taxonomy-add-row">
+          <input type="text" id="new-method-input" placeholder="新しい調理方法名">
+          <button type="button" id="add-method-btn">＋ 追加</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
       <h3 style="margin-top:0">MOSH会員突合チェック（月次）</h3>
       <p class="hint">MOSHの会員リストと、このアプリの会員リストを突合し、退会済みなのに使える状態のままになっている人がいないか確認できます。CSVファイルをお持ちの場合はアップロード、メールアドレスの一覧をコピーできる場合は貼り付けでもチェックできます。</p>
 
@@ -688,9 +721,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_n3XtvBDX7-lyEExEeC3dZw_i9Rg3sLJ';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const CATEGORIES = ['魚介類','肉類','野菜','その他','基本調味料','基本調味料以外','お好みで'];
-const PROJECT_TAGS = ['出張料理','ZOOM教室','その他プロジェクト'];
 const RECIPE_CATEGORIES = ['肉メイン','魚メイン','冷前菜','温前菜','スープ','ご飯もの','パスタ／リゾット／グラタン','デザート'];
-const COOKING_METHODS = ['焼く','煮る','炒める','揚げる','茹でる','蒸す','生（サラダ等）','和える'];
 const ROLE_LABEL = { system_admin:'システム管理者', admin:'運営者(admin)', member:'会員' };
 
 let currentUser = null;
@@ -699,6 +730,11 @@ let cachedRecipes = [];
 let lastShoppingListText = '';
 let selectedShoppingIds = new Set();
 let shoppingServingsMap = new Map();
+/* タグ・調理方法はSupabaseのtags/cooking_methodsテーブルで管理（system_adminが追加・削除可能） */
+let cachedTagRows = [];
+let cachedMethodRows = [];
+let cachedTags = [];
+let cachedCookingMethods = [];
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
@@ -856,10 +892,14 @@ async function handleSession(session){
     document.getElementById('tag-field-wrap').style.display = isProjectOwner ? 'block' : 'none';
     document.getElementById('tag-filter-wrap').style.display = isProjectOwner ? 'block' : 'none';
     document.getElementById('shopping-tag-filter-wrap').style.display = isProjectOwner ? 'block' : 'none';
+    await loadTaxonomy();
     await refreshRecipes();
     renderRecipeList();
     renderShoppingSelect();
-    if(currentProfile?.role === 'system_admin') renderAdminList();
+    if(currentProfile?.role === 'system_admin'){
+      renderAdminList();
+      renderTaxonomyManage();
+    }
   }else{
     currentUser = null;
     currentProfile = null;
@@ -877,7 +917,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
     if(btn.dataset.tab === 'list') renderRecipeList();
     if(btn.dataset.tab === 'shopping') renderShoppingSelect();
-    if(btn.dataset.tab === 'admin') renderAdminList();
+    if(btn.dataset.tab === 'admin'){ renderAdminList(); renderTaxonomyManage(); }
   });
 });
 document.getElementById('tag-filter').addEventListener('change', renderRecipeList);
@@ -1103,6 +1143,29 @@ async function refreshRecipes(){
   cachedRecipes = error ? [] : (data || []);
 }
 
+/* ---------- タグ・調理方法（system_adminが管理する共有マスターリスト） ---------- */
+async function loadTaxonomy(){
+  const [{ data: tagRows, error: tagErr }, { data: methodRows, error: methodErr }] = await Promise.all([
+    sb.from('tags').select('*').order('name'),
+    sb.from('cooking_methods').select('*').order('name')
+  ]);
+  cachedTagRows = tagErr ? [] : (tagRows || []);
+  cachedMethodRows = methodErr ? [] : (methodRows || []);
+  cachedTags = cachedTagRows.map(t=>t.name);
+  cachedCookingMethods = cachedMethodRows.map(m=>m.name);
+  renderCookingMethodOptions();
+  renderTagDatalist();
+}
+function renderCookingMethodOptions(){
+  const select = document.getElementById('recipe-cooking-method');
+  const current = select.value;
+  select.innerHTML = '<option value="">選択してください</option>' + cachedCookingMethods.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+  select.value = cachedCookingMethods.includes(current) ? current : '';
+}
+function renderTagDatalist(){
+  document.getElementById('tag-options').innerHTML = cachedTags.map(t=>`<option value="${escapeHtml(t)}">`).join('');
+}
+
 function renderRecipeList(){
   const container = document.getElementById('recipe-list');
   const tagSelect = document.getElementById('tag-filter');
@@ -1111,7 +1174,7 @@ function renderRecipeList(){
   const searchInput = document.getElementById('recipe-search');
 
   const usedTags = [...new Set(cachedRecipes.map(r=>r.tag).filter(Boolean))];
-  const allTags = [...new Set([...PROJECT_TAGS, ...usedTags])];
+  const allTags = [...new Set([...cachedTags, ...usedTags])];
   const prevTag = tagSelect.value;
   tagSelect.innerHTML = '<option value="">すべて表示</option>' + allTags.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
   tagSelect.value = allTags.includes(prevTag) ? prevTag : '';
@@ -1123,7 +1186,7 @@ function renderRecipeList(){
   categorySelect.value = allCategories.includes(prevCategory) ? prevCategory : '';
 
   const usedMethods = [...new Set(cachedRecipes.map(r=>r.cooking_method).filter(Boolean))];
-  const allMethods = [...new Set([...COOKING_METHODS, ...usedMethods])];
+  const allMethods = [...new Set([...cachedCookingMethods, ...usedMethods])];
   const prevMethod = methodSelect.value;
   methodSelect.innerHTML = '<option value="">すべて表示</option>' + allMethods.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
   methodSelect.value = allMethods.includes(prevMethod) ? prevMethod : '';
@@ -1243,7 +1306,7 @@ function renderShoppingSelect(){
   const searchInput = document.getElementById('shopping-search');
 
   const usedTags = [...new Set(cachedRecipes.map(r=>r.tag).filter(Boolean))];
-  const allTags = [...new Set([...PROJECT_TAGS, ...usedTags])];
+  const allTags = [...new Set([...cachedTags, ...usedTags])];
   const prevTag = tagSelect.value;
   tagSelect.innerHTML = '<option value="">すべて表示</option>' + allTags.map(t=>`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
   tagSelect.value = allTags.includes(prevTag) ? prevTag : '';
@@ -1255,7 +1318,7 @@ function renderShoppingSelect(){
   categorySelect.value = allCategories.includes(prevCategory) ? prevCategory : '';
 
   const usedMethods = [...new Set(cachedRecipes.map(r=>r.cooking_method).filter(Boolean))];
-  const allMethods = [...new Set([...COOKING_METHODS, ...usedMethods])];
+  const allMethods = [...new Set([...cachedCookingMethods, ...usedMethods])];
   const prevMethod = methodSelect.value;
   methodSelect.innerHTML = '<option value="">すべて表示</option>' + allMethods.map(m=>`<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
   methodSelect.value = allMethods.includes(prevMethod) ? prevMethod : '';
@@ -1597,6 +1660,80 @@ function renderAdminListFiltered(){
 }
 
 document.getElementById('admin-search').addEventListener('input', renderAdminListFiltered);
+
+/* ---------- タグ・調理方法の管理（system_adminのみ） ---------- */
+function renderTaxonomyManage(){
+  if(currentProfile?.role !== 'system_admin') return;
+  const tagContainer = document.getElementById('tag-manage-list');
+  const methodContainer = document.getElementById('method-manage-list');
+
+  tagContainer.innerHTML = cachedTagRows.length
+    ? cachedTagRows.map(t=>`<span class="taxonomy-item">${escapeHtml(t.name)}<button type="button" class="remove-tag-btn" data-id="${t.id}" data-name="${escapeHtml(t.name)}">✕</button></span>`).join('')
+    : '<p class="empty">まだタグがありません</p>';
+  methodContainer.innerHTML = cachedMethodRows.length
+    ? cachedMethodRows.map(m=>`<span class="taxonomy-item">${escapeHtml(m.name)}<button type="button" class="remove-method-btn" data-id="${m.id}" data-name="${escapeHtml(m.name)}">✕</button></span>`).join('')
+    : '<p class="empty">まだ調理方法がありません</p>';
+
+  tagContainer.querySelectorAll('.remove-tag-btn').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm(`「${btn.dataset.name}」を削除しますか？\n既にこのタグが設定されているレシピには影響しません。今後の選択肢から外れるだけです。`)) return;
+      const { error } = await sb.from('tags').delete().eq('id', btn.dataset.id);
+      if(error){ alert('削除に失敗しました: ' + error.message); return; }
+      await loadTaxonomy();
+      renderTaxonomyManage();
+      renderRecipeList();
+      renderShoppingSelect();
+    });
+  });
+  methodContainer.querySelectorAll('.remove-method-btn').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      if(!confirm(`「${btn.dataset.name}」を削除しますか？\n既にこの調理方法が設定されているレシピには影響しません。今後の選択肢から外れるだけです。`)) return;
+      const { error } = await sb.from('cooking_methods').delete().eq('id', btn.dataset.id);
+      if(error){ alert('削除に失敗しました: ' + error.message); return; }
+      await loadTaxonomy();
+      renderTaxonomyManage();
+      renderRecipeList();
+      renderShoppingSelect();
+    });
+  });
+}
+
+document.getElementById('add-tag-btn').addEventListener('click', async ()=>{
+  const input = document.getElementById('new-tag-input');
+  const name = input.value.trim();
+  if(!name) return;
+  const { error } = await sb.from('tags').insert({ name });
+  if(error){
+    alert(error.code === '23505' ? 'そのタグは既に登録されています' : '追加に失敗しました: ' + error.message);
+    return;
+  }
+  input.value = '';
+  await loadTaxonomy();
+  renderTaxonomyManage();
+  renderRecipeList();
+  renderShoppingSelect();
+});
+document.getElementById('new-tag-input').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('add-tag-btn').click(); }
+});
+document.getElementById('new-method-input').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('add-method-btn').click(); }
+});
+document.getElementById('add-method-btn').addEventListener('click', async ()=>{
+  const input = document.getElementById('new-method-input');
+  const name = input.value.trim();
+  if(!name) return;
+  const { error } = await sb.from('cooking_methods').insert({ name });
+  if(error){
+    alert(error.code === '23505' ? 'その調理方法は既に登録されています' : '追加に失敗しました: ' + error.message);
+    return;
+  }
+  input.value = '';
+  await loadTaxonomy();
+  renderTaxonomyManage();
+  renderRecipeList();
+  renderShoppingSelect();
+});
 
 /* ---------- MOSH会員突合チェック（system_adminのみ） ---------- */
 async function runMoshCheck(text, emptySourceMessage){
