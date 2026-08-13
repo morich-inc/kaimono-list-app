@@ -664,14 +664,6 @@
   <!-- 会員管理（system_adminのみ） -->
   <section id="tab-admin" class="tab-panel">
     <div class="card">
-      <h3 style="margin-top:0">会員の権限管理</h3>
-      <p class="hint">admin にしたレシピは全会員に共有されます。system_admin はシステム全体を管理できます。</p>
-      <label>名前・メールアドレスで検索</label>
-      <input type="text" id="admin-search" placeholder="名前またはメールアドレスの一部を入力">
-      <div id="admin-list"></div>
-    </div>
-
-    <div class="card">
       <h3 style="margin-top:0">タグ・調理方法の管理</h3>
       <p class="hint">ここで追加・削除した内容は、レシピ登録画面の選択肢やレシピ検索の絞り込みにすぐ反映されます。削除しても、既にレシピに設定済みの値自体は消えません（今後の選択肢から外れるだけです）。</p>
 
@@ -692,6 +684,14 @@
           <button type="button" id="add-method-btn">＋ 追加</button>
         </div>
       </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">会員の権限管理</h3>
+      <p class="hint">admin にしたレシピは全会員に共有されます。system_admin はシステム全体を管理できます。</p>
+      <label>名前・メールアドレスで検索</label>
+      <input type="text" id="admin-search" placeholder="名前またはメールアドレスの一部を入力">
+      <div id="admin-list"></div>
     </div>
 
     <div class="card">
